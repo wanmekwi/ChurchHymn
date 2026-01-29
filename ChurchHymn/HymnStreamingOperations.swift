@@ -42,7 +42,7 @@ struct StreamingConfig {
 }
 
 // MARK: - Streaming Progress
-struct StreamingProgress {
+struct StreamingProgress: Sendable {
     var bytesProcessed: Int64
     let totalBytes: Int64
     var hymnsProcessed: Int
@@ -62,7 +62,7 @@ struct StreamingProgress {
 }
 
 // MARK: - Streaming Operations
-class HymnStreamingOperations: ObservableObject {
+class HymnStreamingOperations: ObservableObject, @unchecked Sendable {
     @Published var isStreaming = false
     @Published var streamingProgress: StreamingProgress?
     @Published var streamingMessage = ""

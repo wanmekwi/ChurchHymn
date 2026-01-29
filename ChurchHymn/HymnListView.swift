@@ -3,6 +3,7 @@ import SwiftData
 
 struct HymnListView: View {
     let hymns: [Hymn]
+    let todaysServiceHymnIds: Set<UUID>
     @Binding var selected: Hymn?
     @Binding var selectedHymnsForDelete: Set<UUID>
     @Binding var isMultiSelectMode: Bool
@@ -12,6 +13,8 @@ struct HymnListView: View {
     @Binding var showingDeleteConfirmation: Bool
     @Binding var showingBatchDeleteConfirmation: Bool
     
+    let onAddToTodaysService: ([Hymn]) -> Void
+    let onRemoveFromTodaysService: (Hymn) -> Void
     let onPresent: (Hymn) -> Void
     
     @State private var searchText = ""
@@ -106,8 +109,17 @@ struct HymnListView: View {
                                 }
                             }
                     }
+
                     Text(hymn.title)
                         .tag(hymn)
+
+                    Spacer(minLength: 8)
+
+                    if todaysServiceHymnIds.contains(hymn.id) {
+                        Image(systemName: "music.note.list")
+                            .foregroundColor(.accentColor)
+                            .help("In Today's Service")
+                    }
                 }
                 .onTapGesture {
                     if !isMultiSelectMode {
@@ -120,6 +132,19 @@ struct HymnListView: View {
                         selected = hymn
                         showingEdit = true
                     }
+
+                    Divider()
+
+                    if todaysServiceHymnIds.contains(hymn.id) {
+                        Button("Remove from Today's Service") {
+                            onRemoveFromTodaysService(hymn)
+                        }
+                    } else {
+                        Button("Add to Today's Service") {
+                            onAddToTodaysService([hymn])
+                        }
+                    }
+
                     Divider()
                     Button("Delete", role: .destructive) {
                         if isMultiSelectMode {
@@ -137,11 +162,13 @@ struct HymnListView: View {
             // Footer with total count
             HStack {
                 Spacer()
-                Text("\(filteredHymns.count) of \(hymns.count) hymns")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                Group {
+                    Text("\(filteredHymns.count) of \(hymns.count) hymns")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
                 Spacer()
             }
             .background(Color(NSColor.controlBackgroundColor))

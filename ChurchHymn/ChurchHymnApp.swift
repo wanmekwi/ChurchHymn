@@ -17,7 +17,7 @@ struct ChurchHymnApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [Hymn.self])
+        .modelContainer(for: [Hymn.self, WorshipService.self, ServiceHymn.self])
         
         // ➊ Help window
         WindowGroup("Import Help", id: "importHelp") {

@@ -9,6 +9,10 @@ enum MenuAction {
     case exportSelected
     case exportMultiple
     case exportAll
+    case toggleTodaysServiceFilter
+    case addSelectedToTodaysService
+    case removeSelectedFromTodaysService
+    case clearTodaysService
 }
 
 // MARK: - Menu Action Publisher
@@ -69,6 +73,33 @@ struct MainMenuCommands: Commands {
                 MenuActionPublisher.shared.sendAction(.exportAll)
             }
             .keyboardShortcut("e", modifiers: [.command, .option])
+        }
+
+        // Service Menu (Today's Worship Service)
+        CommandMenu("Service") {
+            Button("Toggle Today's Service Filter") {
+                MenuActionPublisher.shared.sendAction(.toggleTodaysServiceFilter)
+            }
+            .keyboardShortcut("t", modifiers: [.command])
+
+            Divider()
+
+            Button("Add Selected to Today's Service") {
+                MenuActionPublisher.shared.sendAction(.addSelectedToTodaysService)
+            }
+            .keyboardShortcut("a", modifiers: [.command, .shift])
+
+            Button("Remove Selected from Today's Service") {
+                MenuActionPublisher.shared.sendAction(.removeSelectedFromTodaysService)
+            }
+            .keyboardShortcut(.delete, modifiers: [.command, .shift])
+
+            Divider()
+
+            Button("Clear Today's Service", role: .destructive) {
+                MenuActionPublisher.shared.sendAction(.clearTodaysService)
+            }
+            .keyboardShortcut("k", modifiers: [.command])
         }
         
         // Help Menu (replacing existing)

@@ -24,10 +24,20 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
         self.context = newContext
         self.streamingOperations.updateContext(newContext)
     }
+
+    private func fetchHymnById(_ id: UUID) -> Hymn? {
+        let hid = id
+        let descriptor = FetchDescriptor<Hymn>(predicate: #Predicate<Hymn> { $0.id == hid })
+        return try? context.fetch(descriptor).first
+    }
     
     // MARK: - Import Operations
     
     func importPlainTextHymn(from url: URL, hymns: [Hymn], onComplete: @escaping (ImportPreview) -> Void, onError: @escaping (ImportError) -> Void) {
+        let existingByLowerTitle: [String: UUID] = hymns.reduce(into: [:]) { partialResult, hymn in
+            partialResult[hymn.title.lowercased()] = hymn.id
+        }
+
         Task {
             await MainActor.run {
                 isImporting = true
@@ -77,8 +87,13 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                 let errors: [String] = []
                 
                 // Check for duplicate titles
-                if let existingHymn = hymns.first(where: { $0.title.lowercased() == hymn.title.lowercased() }) {
-                    duplicateHymns.append(ImportPreviewHymn(from: hymn, isDuplicate: true, existingHymn: existingHymn))
+                if let existingId = existingByLowerTitle[hymn.title.lowercased()] {
+                    let existingHymn: Hymn? = await MainActor.run { self.fetchHymnById(existingId) }
+                    if let existingHymn {
+                        duplicateHymns.append(ImportPreviewHymn(from: hymn, isDuplicate: true, existingHymn: existingHymn))
+                    } else {
+                        validHymns.append(ImportPreviewHymn(from: hymn))
+                    }
                 } else {
                     validHymns.append(ImportPreviewHymn(from: hymn))
                 }
@@ -99,12 +114,11 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     importProgress = 1.0
                     progressMessage = "Complete!"
-                    
-                    // Small delay to show completion
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.isImporting = false
-                        onComplete(preview)
-                    }
+                    isImporting = false
+                }
+
+                await MainActor.run {
+                    onComplete(preview)
                 }
                 
             } catch let error as NSError {
@@ -112,12 +126,18 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     isImporting = false
                 }
                 let specificError = getSpecificFileError(error)
-                onError(specificError)
+                await MainActor.run {
+                    onError(specificError)
+                }
             }
         }
     }
     
     func importBatchJSON(from url: URL, hymns: [Hymn], onComplete: @escaping (ImportPreview) -> Void, onError: @escaping (ImportError) -> Void) {
+        let existingByLowerTitle: [String: UUID] = hymns.reduce(into: [:]) { partialResult, hymn in
+            partialResult[hymn.title.lowercased()] = hymn.id
+        }
+
         Task {
             await MainActor.run {
                 isImporting = true
@@ -163,9 +183,10 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     return
                 }
                 
+                let importedCount = importedHymns.count
                 await MainActor.run {
                     importProgress = 0.3
-                    progressMessage = "Processing \(importedHymns.count) hymns..."
+                    progressMessage = "Processing \(importedCount) hymns..."
                 }
                 
                 // Create preview data
@@ -189,8 +210,13 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     }
                     
                     // Check for duplicates
-                    if let existingHymn = hymns.first(where: { $0.title.lowercased() == hymn.title.lowercased() }) {
-                        duplicateHymns.append(ImportPreviewHymn(from: hymn, isDuplicate: true, existingHymn: existingHymn))
+                    if let existingId = existingByLowerTitle[hymn.title.lowercased()] {
+                        let existingHymn: Hymn? = await MainActor.run { self.fetchHymnById(existingId) }
+                        if let existingHymn {
+                            duplicateHymns.append(ImportPreviewHymn(from: hymn, isDuplicate: true, existingHymn: existingHymn))
+                        } else {
+                            validHymns.append(ImportPreviewHymn(from: hymn))
+                        }
                     } else {
                         validHymns.append(ImportPreviewHymn(from: hymn))
                     }
@@ -212,12 +238,11 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     importProgress = 1.0
                     progressMessage = "Complete!"
-                    
-                    // Small delay to show completion
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.isImporting = false
-                        onComplete(preview)
-                    }
+                    isImporting = false
+                }
+
+                await MainActor.run {
+                    onComplete(preview)
                 }
                 
             } catch let error as NSError {
@@ -225,7 +250,9 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     isImporting = false
                 }
                 let specificError = getSpecificFileError(error)
-                onError(specificError)
+                await MainActor.run {
+                    onError(specificError)
+                }
             }
         }
     }
@@ -233,6 +260,8 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
     // MARK: - Export Operations
     
     func exportPlainTextHymn(_ hymn: Hymn, to url: URL, onComplete: @escaping () -> Void, onError: @escaping (ImportError) -> Void) {
+        let text = hymn.toPlainText()
+        
         Task {
             await MainActor.run {
                 isExporting = true
@@ -246,8 +275,6 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     progressMessage = "Generating plain text format..."
                 }
                 
-                let text = hymn.toPlainText()
-                
                 await MainActor.run {
                     exportProgress = 0.8
                     progressMessage = "Writing to file..."
@@ -258,12 +285,11 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     exportProgress = 1.0
                     progressMessage = "Export complete!"
-                    
-                    // Small delay to show completion
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.isExporting = false
-                        onComplete()
-                    }
+                    isExporting = false
+                }
+
+                await MainActor.run {
+                    onComplete()
                 }
                 
             } catch let error as NSError {
@@ -271,12 +297,20 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     isExporting = false
                 }
                 let specificError = getSpecificExportError(error, operation: "plain text")
-                onError(specificError)
+                await MainActor.run {
+                    onError(specificError)
+                }
             }
         }
     }
     
     func exportSingleJSONHymn(_ hymn: Hymn, to url: URL, onComplete: @escaping () -> Void, onError: @escaping (ImportError) -> Void) {
+        let hymnTitle = hymn.title
+        guard let data = hymn.toJSON(pretty: true) else {
+            onError(.invalidFormat("Failed to generate JSON data for hymn '\(hymnTitle)'. The hymn data may be corrupted."))
+            return
+        }
+        
         Task {
             await MainActor.run {
                 isExporting = true
@@ -290,14 +324,6 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     progressMessage = "Generating JSON format..."
                 }
                 
-                guard let data = hymn.toJSON(pretty: true) else {
-                    await MainActor.run {
-                        isExporting = false
-                    }
-                    onError(.invalidFormat("Failed to generate JSON data for hymn '\(hymn.title)'. The hymn data may be corrupted."))
-                    return
-                }
-                
                 await MainActor.run {
                     exportProgress = 0.7
                     progressMessage = "Writing to file..."
@@ -308,12 +334,11 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                 await MainActor.run {
                     exportProgress = 1.0
                     progressMessage = "Export complete!"
-                    
-                    // Small delay to show completion
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.isExporting = false
-                        onComplete()
-                    }
+                    isExporting = false
+                }
+
+                await MainActor.run {
+                    onComplete()
                 }
                 
             } catch let error as NSError {
@@ -321,17 +346,25 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     isExporting = false
                 }
                 let specificError = getSpecificExportError(error, operation: "JSON")
-                onError(specificError)
+                await MainActor.run {
+                    onError(specificError)
+                }
             }
         }
     }
     
     func exportBatchJSON(_ hymns: [Hymn], to url: URL, onComplete: @escaping () -> Void, onError: @escaping (ImportError) -> Void) {
+        let hymnCount = hymns.count
+        guard let data = Hymn.arrayToJSON(hymns, pretty: true) else {
+            onError(.invalidFormat("Failed to generate JSON data for \(hymnCount) hymns. Some hymn data may be corrupted."))
+            return
+        }
+
         Task {
             await MainActor.run {
                 isExporting = true
                 exportProgress = 0.0
-                progressMessage = "Preparing \(hymns.count) hymns for export..."
+                progressMessage = "Preparing \(hymnCount) hymns for export..."
             }
             
             do {
@@ -340,30 +373,21 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     progressMessage = "Generating JSON data..."
                 }
                 
-                guard let data = Hymn.arrayToJSON(hymns, pretty: true) else {
-                    await MainActor.run {
-                        isExporting = false
-                    }
-                    onError(.invalidFormat("Failed to generate JSON data for \(hymns.count) hymns. Some hymn data may be corrupted."))
-                    return
-                }
-                
                 await MainActor.run {
                     exportProgress = 0.6
-                    progressMessage = "Writing \(hymns.count) hymns to file..."
+                    progressMessage = "Writing \(hymnCount) hymns to file..."
                 }
                 
                 try data.write(to: url)
                 
                 await MainActor.run {
                     exportProgress = 1.0
-                    progressMessage = "Export complete! \(hymns.count) hymns exported."
-                    
-                    // Small delay to show completion
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        self.isExporting = false
-                        onComplete()
-                    }
+                    progressMessage = "Export complete! \(hymnCount) hymns exported."
+                    isExporting = false
+                }
+
+                await MainActor.run {
+                    onComplete()
                 }
                 
             } catch let error as NSError {
@@ -371,7 +395,9 @@ class HymnOperations: ObservableObject, @unchecked Sendable {
                     isExporting = false
                 }
                 let specificError = getSpecificExportError(error, operation: "JSON")
-                onError(specificError)
+                await MainActor.run {
+                    onError(specificError)
+                }
             }
         }
     }

@@ -1,8 +1,9 @@
 import SwiftUI
 import AppKit
+import SwiftData
 
 // MARK: - Import Preview
-struct ImportPreviewHymn: Identifiable {
+struct ImportPreviewHymn: Identifiable, Sendable {
     let id = UUID()
     let title: String
     let lyrics: String?
@@ -13,7 +14,7 @@ struct ImportPreviewHymn: Identifiable {
     let tags: [String]?
     let songNumber: Int?
     let isDuplicate: Bool
-    let existingHymn: Hymn?
+    let existingHymnID: PersistentIdentifier?
     
     init(from hymn: Hymn, isDuplicate: Bool = false, existingHymn: Hymn? = nil) {
         self.title = hymn.title
@@ -25,11 +26,11 @@ struct ImportPreviewHymn: Identifiable {
         self.tags = hymn.tags
         self.songNumber = hymn.songNumber
         self.isDuplicate = isDuplicate
-        self.existingHymn = existingHymn
+        self.existingHymnID = existingHymn?.persistentModelID
     }
 }
 
-struct ImportPreview: @unchecked Sendable {
+struct ImportPreview: Sendable {
     let hymns: [ImportPreviewHymn]
     let duplicates: [ImportPreviewHymn]
     let errors: [String]

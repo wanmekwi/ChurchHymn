@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import UniformTypeIdentifiers
 
 // MARK: - Export Types
@@ -10,6 +11,14 @@ enum ExportType: Identifiable {
 enum ImportType: Identifiable {
     case plainText, json, auto
     var id: Int { hashValue }
+}
+
+// MARK: - Hymn Filters
+enum HymnFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case todaysService = "Today's Service"
+
+    var id: String { rawValue }
 }
 
 enum ExportFormat: String, CaseIterable {
@@ -132,14 +141,14 @@ enum DuplicateResolution: String, CaseIterable {
     }
 }
 
-struct DuplicateHymn {
-    let existingHymn: Hymn
+struct DuplicateHymn: Sendable {
+    let existingHymnID: PersistentIdentifier
     let newHymn: Hymn
     let title: String
     
-    init(existing: Hymn, new: Hymn) {
-        self.existingHymn = existing
+    init(existingID: PersistentIdentifier, new: Hymn, title: String) {
+        self.existingHymnID = existingID
         self.newHymn = new
-        self.title = existing.title
+        self.title = title
     }
 } 

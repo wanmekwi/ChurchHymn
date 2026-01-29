@@ -8,6 +8,8 @@ struct ContentView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.openWindow) private var openWindow
     @Query(sort: \Hymn.title, order: .forward) private var hymns: [Hymn]
+    @Query(sort: \WorshipService.date, order: .reverse) private var services: [WorshipService]
+    @Query(sort: \ServiceHymn.order, order: .forward) private var serviceHymns: [ServiceHymn]
     
     // Core state
     @State private var selected: Hymn? = nil
@@ -47,32 +49,93 @@ struct ContentView: View {
     @State private var selectedHymnsForDelete: Set<UUID> = []
     @State private var isMultiSelectMode = false
     @State private var showingBatchDeleteConfirmation = false
+
+    // Today's Service state
+    @State private var hymnFilter: HymnFilter = .all
     
     // Operations
     @StateObject private var operations: HymnOperations
+    @StateObject private var serviceOperations: ServiceOperations
     
     init() {
         // Initialize operations with a temporary context - will be updated in onAppear
-        self._operations = StateObject(wrappedValue: HymnOperations(context: ModelContext(try! ModelContainer(for: Hymn.self))))
+        let tempConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+        let tempContainer = try? ModelContainer(
+            for: Hymn.self,
+            WorshipService.self,
+            ServiceHymn.self,
+            configurations: tempConfig
+        )
+        let tempContext = tempContainer.map(ModelContext.init)
+            ?? ModelContext(try! ModelContainer(for: Hymn.self, configurations: tempConfig))
+        self._operations = StateObject(wrappedValue: HymnOperations(context: tempContext))
+        self._serviceOperations = StateObject(wrappedValue: ServiceOperations(context: tempContext))
+    }
+
+    private var todaysService: WorshipService? {
+        services.first(where: { $0.isActive })
+    }
+
+    private var todaysServiceHymns: [ServiceHymn] {
+        guard let service = todaysService else { return [] }
+        return serviceHymns
+            .filter { $0.serviceId == service.id }
+            .sorted { $0.order < $1.order }
+    }
+
+    private var todaysServiceHymnIds: Set<UUID> {
+        Set(todaysServiceHymns.map { $0.hymnId })
+    }
+
+    private var todaysServiceCount: Int {
+        todaysServiceHymns.count
     }
 
     var body: some View {
         NavigationSplitView {
-            HymnListView(
-                hymns: hymns,
-                selected: $selected,
-                selectedHymnsForDelete: $selectedHymnsForDelete,
-                isMultiSelectMode: $isMultiSelectMode,
-                editHymn: $editHymn,
-                showingEdit: $showingEdit,
-                hymnToDelete: $hymnToDelete,
-                showingDeleteConfirmation: $showingDeleteConfirmation,
-                showingBatchDeleteConfirmation: $showingBatchDeleteConfirmation,
-                onPresent: present
-            )
+            VStack(spacing: 0) {
+                Picker("Filter", selection: $hymnFilter) {
+                    ForEach(HymnFilter.allCases) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+                .padding(.bottom, 6)
+
+                if hymnFilter == .todaysService {
+                    ServiceView(
+                        hymns: hymns,
+                        todaysService: todaysService,
+                        todaysServiceHymns: todaysServiceHymns,
+                        selected: $selected,
+                        onSwitchToLibrary: { hymnFilter = .all },
+                        serviceOperations: serviceOperations
+                    )
+                } else {
+                    HymnListView(
+                        hymns: hymns,
+                        todaysServiceHymnIds: todaysServiceHymnIds,
+                        selected: $selected,
+                        selectedHymnsForDelete: $selectedHymnsForDelete,
+                        isMultiSelectMode: $isMultiSelectMode,
+                        editHymn: $editHymn,
+                        showingEdit: $showingEdit,
+                        hymnToDelete: $hymnToDelete,
+                        showingDeleteConfirmation: $showingDeleteConfirmation,
+                        showingBatchDeleteConfirmation: $showingBatchDeleteConfirmation,
+                        onAddToTodaysService: addHymnsToTodaysService,
+                        onRemoveFromTodaysService: removeHymnFromTodaysService,
+                        onPresent: present
+                    )
+                }
+            }
             .toolbar {
                 HymnToolbar(
                     hymns: hymns,
+                    todaysServiceCount: todaysServiceCount,
+                    hymnFilter: $hymnFilter,
                     selected: $selected,
                     selectedHymnsForDelete: $selectedHymnsForDelete,
                     isMultiSelectMode: $isMultiSelectMode,
@@ -86,6 +149,10 @@ struct ContentView: View {
                     showingDeleteConfirmation: $showingDeleteConfirmation,
                     showingBatchDeleteConfirmation: $showingBatchDeleteConfirmation,
                     context: context,
+                    onToggleTodaysServiceFilter: toggleTodaysServiceFilter,
+                    onAddSelectedToTodaysService: addSelectedToTodaysService,
+                    onRemoveSelectedFromTodaysService: removeSelectedFromTodaysService,
+                    onClearTodaysService: clearTodaysService,
                     onPresent: present
                 ).createToolbar(
                     openWindow: openWindow
@@ -179,6 +246,7 @@ struct ContentView: View {
         .onAppear {
             // Update operations context with the actual context
             operations.updateContext(context)
+            serviceOperations.updateContext(context)
             setupMenuActionHandling()
         }
         .onReceive(NotificationCenter.default.publisher(for: .menuAction)) { notification in
@@ -208,6 +276,61 @@ struct ContentView: View {
             exportMultipleHymns()
         case .exportAll:
             exportAllHymns()
+        case .toggleTodaysServiceFilter:
+            toggleTodaysServiceFilter()
+        case .addSelectedToTodaysService:
+            addSelectedToTodaysService()
+        case .removeSelectedFromTodaysService:
+            removeSelectedFromTodaysService()
+        case .clearTodaysService:
+            clearTodaysService()
+        }
+    }
+
+    // MARK: - Today's Service Actions
+
+    private func toggleTodaysServiceFilter() {
+        hymnFilter = (hymnFilter == .all) ? .todaysService : .all
+    }
+
+    private func addHymnsToTodaysService(_ hymnsToAdd: [Hymn]) {
+        do {
+            try serviceOperations.addHymnsToTodaysService(hymnsToAdd)
+        } catch {
+            showError(.unknown("Failed to add hymns to today's service: \(error.localizedDescription)"))
+        }
+    }
+
+    private func removeHymnFromTodaysService(_ hymn: Hymn) {
+        do {
+            try serviceOperations.removeHymnFromTodaysService(hymnId: hymn.id)
+        } catch {
+            showError(.unknown("Failed to remove hymn from today's service: \(error.localizedDescription)"))
+        }
+    }
+
+    private func addSelectedToTodaysService() {
+        if isMultiSelectMode, !selectedHymnsForDelete.isEmpty {
+            let hymnsToAdd = hymns.filter { selectedHymnsForDelete.contains($0.id) }
+            addHymnsToTodaysService(hymnsToAdd)
+            return
+        }
+
+        if let hymn = selected {
+            addHymnsToTodaysService([hymn])
+        }
+    }
+
+    private func removeSelectedFromTodaysService() {
+        guard let hymn = selected else { return }
+        removeHymnFromTodaysService(hymn)
+    }
+
+    private func clearTodaysService() {
+        do {
+            try serviceOperations.clearTodaysService()
+        } catch {
+            showError(.unknown("Failed to clear today's service: \(error.localizedDescription)"))
         }
     }
     
@@ -623,7 +746,7 @@ struct ContentView: View {
         }
         
         for previewHymn in selectedDuplicateHymns {
-            if let existingHymn = previewHymn.existingHymn {
+            if let existingHymnID = previewHymn.existingHymnID {
                 let newHymn = Hymn(
                     title: previewHymn.title,
                     lyrics: previewHymn.lyrics,
@@ -634,7 +757,7 @@ struct ContentView: View {
                     notes: previewHymn.notes,
                     songNumber: previewHymn.songNumber
                 )
-                duplicatesToProcess.append(DuplicateHymn(existing: existingHymn, new: newHymn))
+                duplicatesToProcess.append(DuplicateHymn(existingID: existingHymnID, new: newHymn, title: previewHymn.title))
             }
         }
         
@@ -671,7 +794,9 @@ struct ContentView: View {
                             operations.importProgress = Double(processedItems) / Double(totalItems)
                             operations.progressMessage = "Merging duplicate: \(duplicate.newHymn.title)..."
                         }
-                        mergeHymnData(existing: duplicate.existingHymn, new: duplicate.newHymn)
+                        if let existingHymn = context.model(for: duplicate.existingHymnID) as? Hymn {
+                            mergeHymnData(existing: existingHymn, new: duplicate.newHymn)
+                        }
                         processedItems += 1
                     }
                 case .replace:
@@ -680,7 +805,9 @@ struct ContentView: View {
                             operations.importProgress = Double(processedItems) / Double(totalItems)
                             operations.progressMessage = "Replacing duplicate: \(duplicate.newHymn.title)..."
                         }
-                        replaceHymnData(existing: duplicate.existingHymn, new: duplicate.newHymn)
+                        if let existingHymn = context.model(for: duplicate.existingHymnID) as? Hymn {
+                            replaceHymnData(existing: existingHymn, new: duplicate.newHymn)
+                        }
                         processedItems += 1
                     }
                 }

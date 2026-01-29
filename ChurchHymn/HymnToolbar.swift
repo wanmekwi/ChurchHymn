@@ -3,6 +3,8 @@ import SwiftData
 
 struct HymnToolbar {
     let hymns: [Hymn]
+    let todaysServiceCount: Int
+    @Binding var hymnFilter: HymnFilter
     @Binding var selected: Hymn?
     @Binding var selectedHymnsForDelete: Set<UUID>
     @Binding var isMultiSelectMode: Bool
@@ -17,6 +19,10 @@ struct HymnToolbar {
     @Binding var showingBatchDeleteConfirmation: Bool
     
     let context: ModelContext
+    let onToggleTodaysServiceFilter: () -> Void
+    let onAddSelectedToTodaysService: () -> Void
+    let onRemoveSelectedFromTodaysService: () -> Void
+    let onClearTodaysService: () -> Void
     let onPresent: (Hymn) -> Void
     
     func createToolbar(openWindow: OpenWindowAction) -> some ToolbarContent {
@@ -118,6 +124,56 @@ struct HymnToolbar {
                 .disabled(isMultiSelectMode ? selectedHymnsForDelete.isEmpty : selected == nil)
                 .help(isMultiSelectMode ? "Delete selected hymns" : "Delete selected hymn")
                 .keyboardShortcut(.delete, modifiers: [.command])
+
+                // Today's Service toggle + count badge
+                Button(action: {
+                    onToggleTodaysServiceFilter()
+                }) {
+                    VStack(spacing: 2) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: hymnFilter == .todaysService ? "music.note.list" : "music.note")
+                                .font(.title2)
+                                .foregroundColor(.accentColor)
+
+                            if todaysServiceCount > 0 {
+                                Text("\(todaysServiceCount)")
+                                    .font(.caption2)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.accentColor)
+                                    .clipShape(Capsule())
+                                    .offset(x: 10, y: -8)
+                            }
+                        }
+                        Text("Service")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .help(hymnFilter == .todaysService ? "Showing Today's Service" : "Show Today's Service")
+                .keyboardShortcut("t", modifiers: [.command])
+
+                // Today's Service actions (selected hymn / multi-select set)
+                Menu("Service") {
+                    Button("Add Selected to Today's Service") {
+                        onAddSelectedToTodaysService()
+                    }
+                    .disabled(selected == nil && selectedHymnsForDelete.isEmpty)
+
+                    Button("Remove Selected from Today's Service") {
+                        onRemoveSelectedFromTodaysService()
+                    }
+                    .disabled(selected == nil)
+
+                    Divider()
+
+                    Button("Clear Today's Service", role: .destructive) {
+                        onClearTodaysService()
+                    }
+                    .disabled(todaysServiceCount == 0)
+                }
+                .help("Today's Service actions")
                 
                 // Select All button - only visible in multi-select mode
                 if isMultiSelectMode {
@@ -213,6 +269,13 @@ struct HymnToolbar {
                         }
                         .disabled(selectedHymnsForDelete.isEmpty)
                         .keyboardShortcut("d", modifiers: [.command])
+
+                        Divider()
+
+                        Button("Add Selected to Today's Service") {
+                            onAddSelectedToTodaysService()
+                        }
+                        .disabled(selectedHymnsForDelete.isEmpty)
                     }
                 }
             }
