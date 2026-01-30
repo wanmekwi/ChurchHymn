@@ -96,12 +96,8 @@ struct StreamingProgressOverlay: View {
                     }
                 }
                 
-                // Cancel button
-                Button("Cancel") {
-                    // TODO: Implement cancellation
-                }
-                .buttonStyle(.bordered)
-                .foregroundColor(.red)
+                // Note: Streaming cancellation not currently supported
+                // (operation will complete and can be undone if needed)
             }
             .padding(30)
             .background(

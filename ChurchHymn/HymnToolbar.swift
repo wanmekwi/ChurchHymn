@@ -6,6 +6,7 @@ struct HymnToolbar {
     let todaysServiceCount: Int
     @Binding var hymnFilter: HymnFilter
     @Binding var selected: Hymn?
+    @Binding var isLivePresenting: Bool
     @Binding var selectedHymnsForDelete: Set<UUID>
     @Binding var isMultiSelectMode: Bool
     @Binding var showingEdit: Bool
@@ -28,134 +29,63 @@ struct HymnToolbar {
     func createToolbar(openWindow: OpenWindowAction) -> some ToolbarContent {
         Group {
             ToolbarItemGroup(placement: .navigation) {
-                // Play button - prominent placement
-                Button(action: {
+                // Primary: Present
+                Button {
                     if let hymn = selected {
                         onPresent(hymn)
                     }
-                }) {
-                    VStack(spacing: 2) {
-                        Image(systemName: "play.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.green)
-                        Text("Present")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                } label: {
+                    Image(systemName: "play.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.green)
                 }
                 .disabled(selected == nil)
                 .help("Present selected hymn")
                 .keyboardShortcut(.return, modifiers: [])
-                
-                // Add Hymn button - prominent placement
-                Button(action: {
+
+                // Primary: Add Hymn
+                Button {
                     let hymn = Hymn(title: "")
                     context.insert(hymn)
                     newHymn = hymn
                     selected = hymn
                     showingEdit = true
-                }) {
-                    VStack(spacing: 2) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.blue)
-                        Text("Add")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                } label: {
+                    Image(systemName: "plus")
+                        .symbolRenderingMode(.hierarchical)
                 }
-                .help("Add new hymn")
-                .keyboardShortcut("n", modifiers: [.command])
-                
-                // Import button - prominent placement
-                Button(action: {
+                .help("Add new hymn (⌘N)")
+
+                // Import (icon-only, toolbar convenience)
+                Button {
                     importType = .auto
                     currentImportType = .auto
-                }) {
-                    VStack(spacing: 2) {
-                        Image(systemName: "square.and.arrow.down.fill")
-                            .font(.title2)
-                            .foregroundColor(.purple)
-                        Text("Import")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                } label: {
+                    Image(systemName: "square.and.arrow.down")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.body.weight(.semibold))
                 }
-                .help("Import hymns from text or JSON files")
-                .keyboardShortcut("i", modifiers: [.command])
-                
-                // Edit button - prominent placement
-                Button(action: {
+                .help("Import songs (⌘I)")
+
+                // Edit current (icon-only, toolbar convenience)
+                Button {
                     showingEdit = true
-                }) {
-                    VStack(spacing: 2) {
-                        Image(systemName: "pencil.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.orange)
-                        Text("Edit")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                } label: {
+                    Image(systemName: "pencil")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.body.weight(.semibold))
                 }
                 .disabled(selected == nil)
-                .help("Edit selected hymn")
-                .keyboardShortcut("e", modifiers: [.command])
-                
-                // Delete button - prominent placement
-                Button(action: {
-                    if isMultiSelectMode {
-                        if !selectedHymnsForDelete.isEmpty {
-                            showingBatchDeleteConfirmation = true
-                        }
-                    } else if let hymn = selected {
-                        hymnToDelete = hymn
-                        showingDeleteConfirmation = true
-                    }
-                }) {
-                    VStack(spacing: 2) {
-                        Image(systemName: "trash.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.red)
-                        Text("Delete")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .disabled(isMultiSelectMode ? selectedHymnsForDelete.isEmpty : selected == nil)
-                .help(isMultiSelectMode ? "Delete selected hymns" : "Delete selected hymn")
-                .keyboardShortcut(.delete, modifiers: [.command])
+                .help("Edit selected song (⌘E)")
 
-                // Today's Service toggle + count badge
-                Button(action: {
-                    onToggleTodaysServiceFilter()
-                }) {
-                    VStack(spacing: 2) {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: hymnFilter == .todaysService ? "music.note.list" : "music.note")
-                                .font(.title2)
-                                .foregroundColor(.accentColor)
-
-                            if todaysServiceCount > 0 {
-                                Text("\(todaysServiceCount)")
-                                    .font(.caption2)
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 4)
-                                    .padding(.vertical, 1)
-                                    .background(Color.accentColor)
-                                    .clipShape(Capsule())
-                                    .offset(x: 10, y: -8)
-                            }
-                        }
-                        Text("Service")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                // Service menu (with badge)
+                Menu {
+                    Button(hymnFilter == .todaysService ? "Show Library" : "Show Today's Service") {
+                        onToggleTodaysServiceFilter()
                     }
-                }
-                .help(hymnFilter == .todaysService ? "Showing Today's Service" : "Show Today's Service")
-                .keyboardShortcut("t", modifiers: [.command])
 
-                // Today's Service actions (selected hymn / multi-select set)
-                Menu("Service") {
+                    Divider()
+
                     Button("Add Selected to Today's Service") {
                         onAddSelectedToTodaysService()
                     }
@@ -172,34 +102,24 @@ struct HymnToolbar {
                         onClearTodaysService()
                     }
                     .disabled(todaysServiceCount == 0)
-                }
-                .help("Today's Service actions")
-                
-                // Select All button - only visible in multi-select mode
-                if isMultiSelectMode {
-                    let allHymnIds = Set(hymns.map { $0.id })
-                    let isAllSelected = !hymns.isEmpty && selectedHymnsForDelete == allHymnIds
-                    
-                    Button(action: {
-                        if isAllSelected {
-                            selectedHymnsForDelete.removeAll()
-                        } else {
-                            selectedHymnsForDelete = allHymnIds
-                        }
-                    }) {
-                        VStack(spacing: 2) {
-                            Image(systemName: isAllSelected ? "checkmark.circle.fill" : "checkmark.circle")
-                                .font(.title2)
-                                .foregroundColor(.blue)
-                            Text(isAllSelected ? "Deselect All" : "Select All")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                } label: {
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: hymnFilter == .todaysService ? "music.note.list" : "music.note")
+                            .symbolRenderingMode(.hierarchical)
+
+                        if todaysServiceCount > 0 {
+                            Text("\(todaysServiceCount)")
+                                .font(.caption2)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.accentColor)
+                                .clipShape(Capsule())
+                                .offset(x: 9, y: -7)
                         }
                     }
-                    .disabled(hymns.isEmpty)
-                    .help(isAllSelected ? "Deselect all hymns" : "Select all hymns")
-                    .keyboardShortcut("a", modifiers: [.command])
                 }
+                .help(hymnFilter == .todaysService ? "Service (showing Today's Service)" : "Service")
             }
             
             ToolbarItemGroup(placement: .primaryAction) {
@@ -208,16 +128,12 @@ struct HymnToolbar {
                     openWindow(id: "importHelp")   // must match the WindowGroup id above
                 } label: {
                     Image(systemName: "questionmark.circle")
-                        .font(.title2)
-                    Text("Help")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .symbolRenderingMode(.hierarchical)
                 }
                 .help("Show import-file help")
-                .keyboardShortcut("?", modifiers: [.command])
                 
                 // Export Menu
-                Menu("Export") {
+                Menu {
                     Button("Export Selected") { 
                         if let hymn = selected {
                             selectedHymnsForExport = [hymn.id]
@@ -243,18 +159,25 @@ struct HymnToolbar {
                     }
                     .disabled(hymns.isEmpty)
                     .help("Use streaming for large collections (>1000 hymns)")
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                        .symbolRenderingMode(.hierarchical)
                 }
+                .help("Export")
                 
                 // Management Menu
-                Menu("Manage") {
+                Menu {
+                    Toggle("Live presenter updates", isOn: $isLivePresenting)
+
+                    Divider()
+
                     Button(isMultiSelectMode ? "Exit Multi-Select" : "Multi-Select") {
                         isMultiSelectMode.toggle()
                         if !isMultiSelectMode {
                             selectedHymnsForDelete.removeAll()
                         }
                     }
-                    .foregroundColor(isMultiSelectMode ? .orange : .blue)
-                    .keyboardShortcut("m", modifiers: [.command])
+                    // Shortcut is defined in the app menu; toolbar is convenience.
                     
                     if isMultiSelectMode {
                         Divider()
@@ -262,13 +185,11 @@ struct HymnToolbar {
                             selectedHymnsForDelete = Set(hymns.map { $0.id })
                         }
                         .disabled(hymns.isEmpty)
-                        .keyboardShortcut("a", modifiers: [.command])
                         
                         Button("Deselect All") {
                             selectedHymnsForDelete.removeAll()
                         }
                         .disabled(selectedHymnsForDelete.isEmpty)
-                        .keyboardShortcut("d", modifiers: [.command])
 
                         Divider()
 
@@ -276,8 +197,31 @@ struct HymnToolbar {
                             onAddSelectedToTodaysService()
                         }
                         .disabled(selectedHymnsForDelete.isEmpty)
+
+                        Divider()
+
+                        Button("Delete Selected Hymns", role: .destructive) {
+                            if !selectedHymnsForDelete.isEmpty {
+                                showingBatchDeleteConfirmation = true
+                            }
+                        }
+                        .disabled(selectedHymnsForDelete.isEmpty)
+                    } else {
+                        Divider()
+
+                        Button("Delete Selected Hymn", role: .destructive) {
+                            if let hymn = selected {
+                                hymnToDelete = hymn
+                                showingDeleteConfirmation = true
+                            }
+                        }
+                        .disabled(selected == nil)
                     }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .symbolRenderingMode(.hierarchical)
                 }
+                .help("Manage")
             }
         }
     }

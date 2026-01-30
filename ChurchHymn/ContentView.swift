@@ -18,6 +18,10 @@ struct ContentView: View {
     @State private var editHymn: Hymn? = nil
     @State private var presentedHymnIndex: Int? = nil
     @State private var isPresenting = false
+    @State private var isLivePresenting = true
+    @State private var presentedHymnId: UUID? = nil
+    @State private var presenterWindow: NSWindow? = nil
+    @State private var presenterWindowDelegate: PresenterWindowDelegate? = nil
     
     // Import/Export state
     @State private var exportType: ExportType?
@@ -56,6 +60,7 @@ struct ContentView: View {
     // Operations
     @StateObject private var operations: HymnOperations
     @StateObject private var serviceOperations: ServiceOperations
+    @StateObject private var presenterSession: PresenterSession
     
     init() {
         // Initialize operations with a temporary context - will be updated in onAppear
@@ -70,6 +75,7 @@ struct ContentView: View {
             ?? ModelContext(try! ModelContainer(for: Hymn.self, configurations: tempConfig))
         self._operations = StateObject(wrappedValue: HymnOperations(context: tempContext))
         self._serviceOperations = StateObject(wrappedValue: ServiceOperations(context: tempContext))
+        self._presenterSession = StateObject(wrappedValue: PresenterSession())
     }
 
     private var todaysService: WorshipService? {
@@ -101,8 +107,8 @@ struct ContentView: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .padding(.horizontal, 8)
-                .padding(.top, 6)
-                .padding(.bottom, 6)
+                .padding(.vertical, 8)
+                .background(Color(NSColor.controlBackgroundColor))
 
                 if hymnFilter == .todaysService {
                     ServiceView(
@@ -137,6 +143,7 @@ struct ContentView: View {
                     todaysServiceCount: todaysServiceCount,
                     hymnFilter: $hymnFilter,
                     selected: $selected,
+                    isLivePresenting: $isLivePresenting,
                     selectedHymnsForDelete: $selectedHymnsForDelete,
                     isMultiSelectMode: $isMultiSelectMode,
                     showingEdit: $showingEdit,
@@ -208,7 +215,13 @@ struct ContentView: View {
                 DetailView(
                     hymn: hymn,
                     currentPresentationIndex: presentedHymnIndex,
-                    isPresenting: isPresenting
+                    isPresenting: isPresenting,
+                    isInTodaysService: todaysServiceHymnIds.contains(hymn.id),
+                    onAddToTodaysService: { addHymnsToTodaysService([hymn]) },
+                    onRemoveFromTodaysService: { removeHymnFromTodaysService(hymn) },
+                    onPresentPart: { partIndex in
+                        presentFromDetail(hymn, partIndex: partIndex)
+                    }
                 )
             } else {
                 EmptyDetailView()
@@ -248,6 +261,14 @@ struct ContentView: View {
             operations.updateContext(context)
             serviceOperations.updateContext(context)
             setupMenuActionHandling()
+            syncPresenterSessionFromPresentedId()
+        }
+        .onChange(of: presentedHymnId) { _, _ in
+            syncPresenterSessionFromPresentedId()
+        }
+        .onChange(of: hymns.map(\.id)) { _, _ in
+            // If the currently presented hymn was deleted, fall back to a safe empty state.
+            syncPresenterSessionFromPresentedId()
         }
         .onReceive(NotificationCenter.default.publisher(for: .menuAction)) { notification in
             if let action = notification.object as? MenuAction {
@@ -370,47 +391,117 @@ struct ContentView: View {
     }
     
     private func present(_ hymn: Hymn) {
-        // 1. Create the SwiftUI view
-        let presenterView = PresenterView(
-            hymn: hymn,
+        // Keep manual present behavior when Live Mode is OFF.
+        if !isLivePresenting {
+            presentedHymnId = hymn.id
+        } else if presentedHymnId == nil {
+            // Live Mode ON: don't change content on selection/search; ensure the window isn't empty.
+            presentedHymnId = hymn.id
+        }
+
+        syncPresenterSessionFromPresentedId()
+        showPresenterWindow()
+    }
+
+    private func syncPresenterSessionFromPresentedId() {
+        guard let id = presentedHymnId else { return }
+        presenterSession.hymn = hymns.first(where: { $0.id == id })
+        if presenterSession.hymn == nil {
+            // Hymn no longer exists (e.g. deleted) → safe empty state.
+            presentedHymnId = nil
+        }
+    }
+
+    private func showPresenterWindow() {
+        isPresenting = true
+        ensurePresenterWindow()
+        presenterWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        // Enter full screen on the target display (only if needed).
+        if let window = presenterWindow, !window.styleMask.contains(.fullScreen) {
+            window.toggleFullScreen(nil)
+        }
+    }
+
+    private func closePresenterWindow() {
+        presentedHymnIndex = nil
+        isPresenting = false
+
+        guard let window = presenterWindow else { return }
+
+        // Clear references first to prevent recursion from windowWillClose delegate
+        presenterWindow = nil
+        presenterWindowDelegate = nil
+
+        // For full screen windows, we need to exit full screen before closing
+        if window.styleMask.contains(.fullScreen) {
+            // Exit full screen
+            window.toggleFullScreen(nil)
+            
+            // Use notification to close after full screen exit completes
+            var observer: NSObjectProtocol?
+            observer = NotificationCenter.default.addObserver(
+                forName: NSWindow.didExitFullScreenNotification,
+                object: window,
+                queue: .main
+            ) { _ in
+                window.close()
+                if let obs = observer {
+                    NotificationCenter.default.removeObserver(obs)
+                }
+            }
+        } else {
+            window.close()
+        }
+    }
+
+    private func ensurePresenterWindow() {
+        guard presenterWindow == nil else { return }
+
+        let rootView = PresenterRootView(
+            session: presenterSession,
             onIndexChange: { index in
                 presentedHymnIndex = index
             },
-            onDismiss: {
-                presentedHymnIndex = nil
-                isPresenting = false
+            onRequestClose: {
+                closePresenterWindow()
             }
         )
-        isPresenting = true
-        
-        // 2. Host it in AppKit
-        let hostingController = NSHostingController(rootView: presenterView)
-        // 3. Build a new window
+
+        let hostingController = NSHostingController(rootView: rootView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = hymn.title
-        
+        window.title = "Presenter"
+        window.identifier = NSUserInterfaceItemIdentifier("PresenterWindow")
+
         // Get available screens
         let screens = NSScreen.screens
         let targetScreen = screens.count > 1 ? screens[1] : screens[0]
-        
+
         // Configure window
         window.styleMask.remove(.titled)
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.collectionBehavior = [.fullScreenPrimary]
-        
+
         // Position on target screen
         let screenFrame = targetScreen.frame
         window.setFrame(screenFrame, display: true)
-        
-        // Make window key and visible
-        window.makeKeyAndOrderFront(nil)
-        
-        // Enter full screen mode
-        if window.styleMask.contains(.fullScreen) {
-            window.toggleFullScreen(nil)
-        } else {
-            window.toggleFullScreen(nil)
-        }
+
+        let delegate = PresenterWindowDelegate(onClose: {
+            closePresenterWindow()
+        })
+        window.delegate = delegate
+        presenterWindowDelegate = delegate
+
+        presenterWindow = window
+    }
+
+    private func presentFromDetail(_ hymn: Hymn, partIndex: Int) {
+        // This is the only path that changes the presented hymn while Live Mode is ON.
+        presentedHymnId = hymn.id
+        presenterSession.hymn = hymn
+        presenterSession.requestedIndex = partIndex
+        showPresenterWindow()
     }
     
     private func deleteHymn() {
@@ -431,7 +522,7 @@ struct ContentView: View {
         do {
             try context.save()
         } catch {
-            print("Error saving after delete: \(error)")
+            // Save failed - context will retain previous state
         }
         
         hymnToDelete = nil
@@ -458,7 +549,7 @@ struct ContentView: View {
         do {
             try context.save()
         } catch {
-            print("Error saving after batch delete: \(error)")
+            // Save failed - context will retain previous state
         }
         
         selectedHymnsForDelete.removeAll()
@@ -481,7 +572,7 @@ struct ContentView: View {
             do {
                 try context.save()
             } catch {
-                print("Error saving after cleanup: \(error)")
+                // Save failed - context will retain previous state
             }
         }
     }
@@ -528,8 +619,6 @@ struct ContentView: View {
     }
     
     private func handleImportResult(_ result: Result<[URL], Error>, importType: ImportType?) {
-        print("DEBUG: importType parameter = \(String(describing: importType))")
-        
         switch result {
         case .success(let urls):
             guard !urls.isEmpty else {
@@ -1056,5 +1145,17 @@ struct ContentView: View {
         case .batchJSON: return "Hymns.json"
         default: return "Export"
         }
+    }
+}
+
+private final class PresenterWindowDelegate: NSObject, NSWindowDelegate {
+    private let onClose: () -> Void
+
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose()
     }
 }

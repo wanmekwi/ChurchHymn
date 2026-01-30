@@ -72,7 +72,7 @@ struct ServiceHistoryView: View {
             try serviceOperations.setActiveService(service)
             dismiss()
         } catch {
-            print("Failed to set active service: \(error)")
+            // Set active failed - previous service remains active
         }
     }
 
@@ -82,7 +82,7 @@ struct ServiceHistoryView: View {
             try serviceOperations.deleteService(service)
             selection = services.first(where: { $0.isActive }) ?? services.first
         } catch {
-            print("Failed to delete service: \(error)")
+            // Delete failed - service will remain
         }
     }
 }

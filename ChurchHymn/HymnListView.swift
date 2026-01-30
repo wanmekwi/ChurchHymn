@@ -79,20 +79,30 @@ struct HymnListView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // Search bar
-            SearchBar(text: $searchText)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color(NSColor.controlBackgroundColor))
-            // Sorting options
-            Picker("Sort by", selection: $sortOption) {
-                ForEach(SortOption.allCases) { option in
-                    Text(option.rawValue).tag(option)
+            // Search + Sort (refined hierarchy)
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("Search hymns…", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack(spacing: 8) {
+                    Text("Sort:")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+
+                    Picker("", selection: $sortOption) {
+                        ForEach(SortOption.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+
+                    Spacer(minLength: 0)
                 }
             }
-            .pickerStyle(SegmentedPickerStyle())
             .padding(.horizontal, 8)
-            .padding(.bottom, 4)
+            .padding(.vertical, 8)
+            .background(Color(NSColor.controlBackgroundColor))
             Divider()
             
             // Hymns list
@@ -115,10 +125,28 @@ struct HymnListView: View {
 
                     Spacer(minLength: 8)
 
-                    if todaysServiceHymnIds.contains(hymn.id) {
-                        Image(systemName: "music.note.list")
-                            .foregroundColor(.accentColor)
-                            .help("In Today's Service")
+                    if !isMultiSelectMode {
+                        if todaysServiceHymnIds.contains(hymn.id) {
+                            Button {
+                                onRemoveFromTodaysService(hymn)
+                            } label: {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .buttonStyle(.plain)
+                            .help("In Today's Service — click to remove")
+                        } else {
+                            Button {
+                                onAddToTodaysService([hymn])
+                            } label: {
+                                Image(systemName: "plus.circle")
+                                    .symbolRenderingMode(.hierarchical)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Add to Today's Service")
+                        }
                     }
                 }
                 .onTapGesture {
@@ -160,6 +188,7 @@ struct HymnListView: View {
             }
             
             // Footer with total count
+            Divider()
             HStack {
                 Spacer()
                 Group {
@@ -168,7 +197,7 @@ struct HymnListView: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .padding(.horizontal, 8)
-                .padding(.vertical, 4)
+                .padding(.vertical, 8)
                 Spacer()
             }
             .background(Color(NSColor.controlBackgroundColor))
@@ -177,30 +206,4 @@ struct HymnListView: View {
     }
 }
 
-// Custom SearchBar to ensure immediate updates
-struct SearchBar: View {
-    @Binding var text: String
-    
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(.secondary)
-            TextField("Search hymns...", text: $text)
-                .textFieldStyle(PlainTextFieldStyle())
-                // Add these modifiers to ensure immediate updates
-                .onChange(of: text) { oldValue, newValue in
-                    // Force immediate update
-                    text = newValue
-                }
-            if !text.isEmpty {
-                Button(action: {
-                    text = ""
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-    }
-} 
+// SearchBar removed in Phase B (use macOS-native rounded TextField above)

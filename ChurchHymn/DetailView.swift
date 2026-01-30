@@ -4,35 +4,69 @@ struct DetailView: View {
     let hymn: Hymn
     var currentPresentationIndex: Int?
     var isPresenting: Bool
+    let isInTodaysService: Bool
+    let onAddToTodaysService: () -> Void
+    let onRemoveFromTodaysService: () -> Void
+    let onPresentPart: (Int) -> Void
+
+    private var isActivelyPresentingThisView: Bool {
+        isPresenting && currentPresentationIndex != nil
+    }
     
     var body: some View {
         VStack(spacing: 0) {
             // Title and metadata
-            VStack(alignment: .leading, spacing: 8) {
-                Text(hymn.title)
-                    .font(.title)
-                    .padding(.bottom, 4)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(hymn.title)
+                        .font(.title)
+                        .fontWeight(.semibold)
+                        .padding(.bottom, 4)
+
+                    Spacer(minLength: 0)
+
+                    if isActivelyPresentingThisView {
+                        Text("Presenting")
+                            .font(.caption2)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.accentColor)
+                            .clipShape(Capsule())
+                            .help("This hymn is currently presenting")
+                    }
+
+                    Button {
+                        if isInTodaysService {
+                            onRemoveFromTodaysService()
+                        } else {
+                            onAddToTodaysService()
+                        }
+                    } label: {
+                        Image(systemName: isInTodaysService ? "checkmark.circle.fill" : "plus.circle")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(isInTodaysService ? Color.accentColor : Color.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isInTodaysService ? "In Today's Service — click to remove" : "Add to Today's Service")
+                }
                 
-                HStack {
+                HStack(spacing: 12) {
                     if let number = hymn.songNumber {
-                        Text("#\(number)")
-                            .foregroundColor(.secondary)
+                        DetailMetaPill(text: "#\(number)")
                     }
-                    if let key = hymn.musicalKey {
-                        Text("Key: \(key)")
-                            .foregroundColor(.secondary)
+                    if let key = hymn.musicalKey, !key.isEmpty {
+                        DetailMetaPill(text: "Key \(key)")
                     }
-                    if let author = hymn.author {
-                        Text("By: \(author)")
-                            .foregroundColor(.secondary)
+                    if let author = hymn.author, !author.isEmpty {
+                        DetailMetaPill(text: author)
                     }
                 }
-                .font(.subheadline)
                 
                 if let copyright = hymn.copyright {
                     Text(copyright)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding()
@@ -45,9 +79,24 @@ struct DetailView: View {
             LyricsDetailView(
                 hymn: hymn,
                 currentPresentationIndex: currentPresentationIndex,
-                isPresenting: isPresenting
+                isPresenting: isPresenting,
+                onSelectPart: onPresentPart
             )
         }
+    }
+}
+
+private struct DetailMetaPill: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.quaternary.opacity(0.35))
+            .clipShape(Capsule())
     }
 }
 

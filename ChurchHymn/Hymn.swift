@@ -68,10 +68,6 @@ class Hymn: Identifiable, Codable {
     // If you add new required fields in the future, make them optional first, then migrate old data, then make them required.
     // Use the modelVersion property to track schema changes and perform migrations as needed.
 
-    // --- Test Plan ---
-    // 1. Test encoding/decoding Hymn to/from JSON.
-    // 2. Test creating Hymn with missing/partial data.
-    // 3. Test UI with nil/empty fields.
 
     // MARK: - Codable
     enum CodingKeys: String, CodingKey {
@@ -129,7 +125,6 @@ extension Hymn {
     // MARK: - Plain Text Import/Export
 
     static func fromPlainText(_ text: String) -> Hymn? {
-        print("Starting plain text import...")
         let lines = text.components(separatedBy: .newlines)
         var title: String?
         var lyricsLines: [String] = []
@@ -154,30 +149,22 @@ extension Hymn {
             
             // Handle metadata lines
             if trimmed.hasPrefix("#") {
-                print("Processing metadata line: \(trimmed)")
                 let processMetadata = { (prefix: String, dropCount: Int) -> String? in
                     trimmed.hasPrefix(prefix) ? trimmed.dropFirst(dropCount).trimmingCharacters(in: .whitespaces) : nil
                 }
                 
                 if let keyValue = processMetadata("#Key:", 5) { 
                     key = keyValue.isEmpty ? nil : keyValue
-                    print("Found key: \(key ?? "nil")")
                 }
                 else if let authorValue = processMetadata("#Author:", 8) { 
                     author = authorValue.isEmpty ? nil : authorValue
-                    print("Found author: \(author ?? "nil")")
                 }
                 else if let copyrightValue = processMetadata("#Copyright:", 11) { 
                     copyright = copyrightValue.isEmpty ? nil : copyrightValue
-                    print("Found copyright: \(copyright ?? "nil")")
                 }
                 else if let numberStr = processMetadata("#Number:", 8) {
-                    print("Found number line: \(numberStr)")
                     if !numberStr.isEmpty, let num = Int(numberStr) {
                         songNumber = num
-                        print("Successfully parsed number: \(num)")
-                    } else {
-                        print("Failed to parse number from: \(numberStr)")
                     }
                 }
                 else if let tagsValue = processMetadata("#Tags:", 6) {
@@ -185,12 +172,10 @@ extension Hymn {
                         tags = tagsValue.components(separatedBy: ",")
                             .map { $0.trimmingCharacters(in: .whitespaces) }
                             .filter { !$0.isEmpty }
-                        print("Found tags: \(tags ?? [])")
                     }
                 }
                 else if let notesValue = processMetadata("#Notes:", 7) {
                     notes = notesValue.isEmpty ? nil : notesValue
-                    print("Found notes: \(notes ?? "nil")")
                 }
                 continue
             }
@@ -199,7 +184,6 @@ extension Hymn {
             if !foundTitle && !trimmed.hasPrefix("#") {
                 title = trimmed
                 foundTitle = true
-                print("Found title: \(trimmed)")
                 continue
             }
             
@@ -211,7 +195,6 @@ extension Hymn {
         
         // Validate that we have a title
         guard let hymnTitle = title, !hymnTitle.trimmingCharacters(in: .whitespaces).isEmpty else { 
-            print("No valid title found")
             return nil 
         }
         
@@ -226,7 +209,6 @@ extension Hymn {
             notes: notes,
             songNumber: songNumber
         )
-        print("Created hymn with number: \(hymn.songNumber?.description ?? "nil")")
         return hymn
     }
 
@@ -250,11 +232,7 @@ extension Hymn {
     static func fromJSON(_ data: Data) -> Hymn? {
         do {
             return try JSONDecoder().decode(Hymn.self, from: data)
-        } catch let error as DecodingError {
-            print("JSON decode error: \(error)")
-            return nil
         } catch {
-            print("JSON decode error: \(error)")
             return nil
         }
     }
@@ -264,11 +242,7 @@ extension Hymn {
             let encoder = JSONEncoder()
             if pretty { encoder.outputFormatting = .prettyPrinted }
             return try encoder.encode(self)
-        } catch let error as EncodingError {
-            print("JSON encode error: \(error)")
-            return nil
         } catch {
-            print("JSON encode error: \(error)")
             return nil
         }
     }
@@ -278,11 +252,7 @@ extension Hymn {
     static func arrayFromJSON(_ data: Data) -> [Hymn]? {
         do {
             return try JSONDecoder().decode([Hymn].self, from: data)
-        } catch let error as DecodingError {
-            print("JSON array decode error: \(error)")
-            return nil
         } catch {
-            print("JSON array decode error: \(error)")
             return nil
         }
     }
@@ -292,11 +262,7 @@ extension Hymn {
             let encoder = JSONEncoder()
             if pretty { encoder.outputFormatting = .prettyPrinted }
             return try encoder.encode(hymns)
-        } catch let error as EncodingError {
-            print("JSON array encode error: \(error)")
-            return nil
         } catch {
-            print("JSON array encode error: \(error)")
             return nil
         }
     }

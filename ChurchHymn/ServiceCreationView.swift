@@ -45,8 +45,7 @@ struct ServiceCreationView: View {
             )
             dismiss()
         } catch {
-            // Keep this simple for now; any failures will appear in console.
-            print("Failed to create service: \(error)")
+            // Create failed - no service will be added
         }
     }
 }

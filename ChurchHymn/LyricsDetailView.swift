@@ -10,6 +10,7 @@ struct LyricsDetailView: View {
     let hymn: Hymn
     var currentPresentationIndex: Int?
     var isPresenting: Bool
+    var onSelectPart: ((Int) -> Void)? = nil
     
     @Namespace private var scrollSpace
     
@@ -37,35 +38,50 @@ struct LyricsDetailView: View {
                                 // Part label (if any)
                                 if let label = part.label {
                                     Text(label)
-                                        .font(.headline)
-                                        .foregroundColor(.secondary)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.secondary)
+                                        .textCase(.uppercase)
                                 } else {
                                     Text("Verse \(parts[0..<index].filter { $0.label == nil }.count + 1)")
-                                        .font(.headline)
-                                        .foregroundColor(.secondary)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(.secondary)
+                                        .textCase(.uppercase)
                                 }
                                 
                                 // Lyrics
                                 Text(part.lines.joined(separator: "\n"))
                                     .font(.body)
-                                    .padding(8)
+                                    .padding(10)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .background(
                                         RoundedRectangle(cornerRadius: 8)
-                                            .fill(isPresenting && currentPresentationIndex == index ? 
-                                                  Color.accentColor.opacity(0.1) : Color.clear)
+                                            .fill(Color(NSColor.textBackgroundColor))
                                     )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.accentColor.opacity(isPresenting && currentPresentationIndex == index ? 0.12 : 0.0))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .strokeBorder(.quaternary, lineWidth: 1)
+                                    )
+                                    .contentShape(Rectangle())
+                                    .onTapGesture {
+                                        onSelectPart?(index)
+                                    }
                                     .animation(.easeInOut(duration: 0.3), value: currentPresentationIndex)
                             }
                             .id(index) // Add id for scrolling
                         }
                     } else {
                         Text("No lyrics available")
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
-                .padding()
+                .padding(16)
             }
             .onChange(of: currentPresentationIndex) { _, newIndex in
                 if let index = newIndex {

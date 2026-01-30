@@ -44,14 +44,8 @@ struct ProgressOverlay: View {
                         .foregroundColor(.secondary)
                 }
                 
-                // Cancel button (only for imports)
-                if isImporting {
-                    Button("Cancel") {
-                        // TODO: Implement cancellation
-                    }
-                    .buttonStyle(.bordered)
-                    .foregroundColor(.red)
-                }
+                // Note: Import/export cancellation not currently supported
+                // (operations complete quickly for typical collections)
             }
             .padding(30)
             .background(

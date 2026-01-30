@@ -141,7 +141,7 @@ enum DuplicateResolution: String, CaseIterable {
     }
 }
 
-struct DuplicateHymn: Sendable {
+struct DuplicateHymn {
     let existingHymnID: PersistentIdentifier
     let newHymn: Hymn
     let title: String

@@ -9,11 +9,11 @@ import AppKit
 
 struct PresenterView: View {
     var hymn: Hymn
+    @Binding var requestedIndex: Int?
     var onIndexChange: (Int) -> Void
-    var onDismiss: () -> Void
+    var onRequestClose: () -> Void
     @State private var index: Int = 0
     @State private var monitor: Any?
-    @Environment(\.dismiss) private var dismiss
 
     /// Sequence for presentation: if a chorus exists, repeat it after each verse;
     /// otherwise present each verse block in order.
@@ -32,100 +32,149 @@ struct PresenterView: View {
     }
     
     var body: some View {
-        GeometryReader { geo in
-            VStack(spacing: 24) {
-                // Title and Key at top
-                HStack(spacing: 20) {
+        // Defensive: the hymn (or its lyrics) can change while this view is alive.
+        // SwiftUI may re-render before our `onChange` handlers run, so always clamp.
+        let safeIndex: Int = {
+            guard !presentationParts.isEmpty else { return 0 }
+            return min(max(0, index), presentationParts.count - 1)
+        }()
+
+        GeometryReader { _ in
+            VStack(spacing: 0) {
+                // MARK: Top bar: Title (centered) + Key (right)
+                HStack {
+                    Spacer()
+
                     Text(hymn.title)
-                        .font(.system(size: 25, weight: .bold))
+                        .font(.system(size: 36, weight: .bold))
                         .foregroundColor(.white)
-                    
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+
+                    Spacer()
+
                     if let key = hymn.musicalKey, !key.isEmpty {
-                        Text("(\(key))")
+                        Text(key)
                             .font(.system(size: 28, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.white.opacity(0.85))
+                            .padding(.trailing, 24)
                     }
                 }
-                .padding(.top, 20)
+                .padding(.vertical, 16)
+                .padding(.horizontal, 24)
+
+                // Separator line (90% width, thicker)
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(width: geometry.size.width * 0.9, height: 2)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(height: 2)
+
+                // MARK: Lyrics block
                 Spacer()
-                // Lyrics block
+
                 if !presentationParts.isEmpty {
-                    Text(presentationParts[index].lines.joined(separator: "\n"))
+                    Text(presentationParts[safeIndex].lines.joined(separator: "\n"))
                         .font(.system(size: 80, weight: .bold))
                         .minimumScaleFactor(0.1)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.white)
-                        .padding()
+                        .padding(.horizontal, 32)
                 } else if let lyrics = hymn.lyrics, !lyrics.isEmpty {
-                    // Fallback: show raw lyrics if parts parsing failed
                     Text(lyrics)
                         .font(.system(size: 60, weight: .bold))
                         .minimumScaleFactor(0.1)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.white)
-                        .padding()
+                        .padding(.horizontal, 32)
                 } else {
-                    // Show a test message when no lyrics are available
                     VStack(spacing: 20) {
-                        Text("Test Hymn Display")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white)
-                        Text("This is a test to verify the presenter is working correctly.")
-                            .font(.system(size: 30))
-                            .foregroundColor(.gray)
-                            .multilineTextAlignment(.center)
+                        Text("No lyrics available")
+                            .font(.system(size: 44, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.7))
                         Text("Press ESC to close")
                             .font(.system(size: 20))
-                            .foregroundColor(.yellow)
+                            .foregroundColor(.white.opacity(0.5))
                     }
-                    .padding()
                 }
+
                 Spacer()
-                // Label or verse number at bottom right
+
+                // Separator line (90% width, thicker)
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Color.white.opacity(0.3))
+                        .frame(width: geometry.size.width * 0.9, height: 2)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(height: 2)
+
+                // MARK: Bottom bar
                 HStack {
                     // Copyright bottom-left
                     Text(hymn.copyright ?? "")
-                        .font(.system(size: 15))
-                        .foregroundColor(.white)
+                        .font(.system(size: 20))
+                        .foregroundColor(.white.opacity(0.6))
+
                     Spacer()
-                    // Verse/Chorus bottom-right
+
+                    // Verse/Chorus + end indicator
                     if !presentationParts.isEmpty {
-                        HStack(spacing: 8) {
-                            Group {
-                                if let label = presentationParts[index].label {
-                                    Text(label)
-                                } else {
-                                    let verseNumber = presentationParts[0...index].filter { $0.label == nil }.count
-                                    Text("Verse \(verseNumber)")
-                                }
+                        HStack(spacing: 16) {
+                            if let label = presentationParts[safeIndex].label {
+                                Text(label)
+                                    .font(.system(size: 24, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.85))
+                            } else {
+                                let verseNumber = presentationParts.prefix(safeIndex + 1).filter { $0.label == nil }.count
+                                Text("Verse \(verseNumber)")
+                                    .font(.system(size: 24, weight: .semibold))
+                                    .foregroundColor(.white.opacity(0.85))
                             }
-                            .font(.system(size: 15))
-                            .foregroundColor(.white)
-                            
-                            // Show end indicator if we're at the last part
-                            if index == presentationParts.count - 1 {
-                                Image(systemName: "arrow.up.circle.fill")
-                                    .font(.system(size: 15))
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .symbolEffect(.pulse)
+
+                            // End of song indicator
+                            if safeIndex == presentationParts.count - 1 {
+                                Text("END")
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundColor(.black)
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 6)
+                                    .background(Color.yellow)
+                                    .clipShape(Capsule())
                             }
                         }
                     }
                 }
-                .padding([.bottom, .horizontal], 20)
+                .padding(.vertical, 16)
+                .padding(.horizontal, 32)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
             .onAppear {
                 startMonitor()
-                onIndexChange(index)
+                onIndexChange(safeIndex)
             }
             .onDisappear {
                 stopMonitor()
-                onDismiss()
             }
             .onChange(of: index) { _, newIndex in
                 onIndexChange(newIndex)
+            }
+            .onChange(of: hymn.id) { _, _ in
+                // When the hymn changes, reset to the first part for a predictable live-update experience.
+                index = 0
+                onIndexChange(0)
+            }
+            .onChange(of: requestedIndex) { _, newValue in
+                guard let newValue else { return }
+                if !presentationParts.isEmpty, newValue >= 0, newValue < presentationParts.count {
+                    index = newValue
+                    onIndexChange(newValue)
+                }
+                // Allow re-sending the same index later.
+                requestedIndex = nil
             }
         }
         .ignoresSafeArea()
@@ -147,6 +196,21 @@ struct PresenterView: View {
     
     private func startMonitor() {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Allow presenter navigation even when the main app window is focused,
+            // but never steal keystrokes while the user is typing into a text field (e.g. search).
+            if let responder = NSApp.keyWindow?.firstResponder,
+               responder is NSTextView || responder is NSTextField {
+                return event
+            }
+
+            // Only react if the presenter window exists (open/visible).
+            let presenterIsOpen = NSApp.windows.contains(where: { win in
+                win.identifier?.rawValue == "PresenterWindow" && win.isVisible
+            })
+            if !presenterIsOpen {
+                return event
+            }
+
             // Get the character if available
             let char = event.characters?.lowercased().first
             
@@ -157,30 +221,32 @@ struct PresenterView: View {
                 retreat()
             case 53: // ESC key
                 DispatchQueue.main.async {
-                    dismiss()
+                    onRequestClose()
                 }
                 return nil
             default:
-                // Handle number keys (1-9) and 'c' for chorus
+                // Handle number keys (1-9) for verses and 'c' for chorus
                 if let character = char {
                     if character == "c" {
                         // Find and show chorus
                         if let chorusIndex = presentationParts.firstIndex(where: { $0.label?.lowercased().contains("chorus") ?? false }) {
                             index = chorusIndex
-                            return nil
                         }
-                    } else if let number = Int(String(character)) {
-                        // Find and show the requested verse
+                        return nil
+                    } else if character >= "1" && character <= "9" {
+                        let number = Int(String(character))!
+                        // Jump to verse N (verses are parts without a label)
                         var verseCount = 0
                         for (i, part) in presentationParts.enumerated() {
                             if part.label == nil {
                                 verseCount += 1
                                 if verseCount == number {
                                     index = i
-                                    return nil
+                                    break
                                 }
                             }
                         }
+                        return nil
                     }
                 }
                 return event

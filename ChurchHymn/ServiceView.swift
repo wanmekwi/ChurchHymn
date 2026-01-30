@@ -58,45 +58,72 @@ struct ServiceView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(serviceTitle)
                         .font(.headline)
+
                     if let date = todaysService?.date {
                         Text(date.formatted(date: .abbreviated, time: .omitted))
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     } else {
                         Text("No active service")
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                     }
                 }
 
-                Spacer()
+                Spacer(minLength: 0)
 
-                Text("\(orderedItems.count) hymns")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                Text("\(orderedItems.count)")
+                    .font(.caption2)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.accentColor.opacity(0.15))
+                    .clipShape(Capsule())
+                    .help("\(orderedItems.count) hymns in service")
             }
 
-            HStack(spacing: 8) {
-                Button("Add Hymns…") { onSwitchToLibrary() }
-                    .disabled(todaysService == nil && hymns.isEmpty)
+            HStack(spacing: 12) {
+                Button { onSwitchToLibrary() } label: {
+                    Image(systemName: "plus")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .help("Add hymns to service")
+                .disabled(todaysService == nil && hymns.isEmpty)
 
-                Button("New Service…") { showingCreateService = true }
+                Button { showingCreateService = true } label: {
+                    Image(systemName: "calendar.badge.plus")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .help("New service")
 
-                Button("History…") { showingServiceHistory = true }
+                Button { showingServiceHistory = true } label: {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .help("Service history")
 
-                Spacer()
+                Spacer(minLength: 0)
 
-                Button("Archive") { showingArchiveConfirm = true }
-                    .disabled(todaysService == nil)
+                Button { showingArchiveConfirm = true } label: {
+                    Image(systemName: "archivebox")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .help("Archive current service")
+                .disabled(todaysService == nil)
 
-                Button("Clear", role: .destructive) { showingClearConfirm = true }
-                    .disabled(orderedItems.isEmpty)
+                Button(role: .destructive) { showingClearConfirm = true } label: {
+                    Image(systemName: "trash")
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .help("Clear hymns from current service")
+                .disabled(orderedItems.isEmpty)
             }
+            .buttonStyle(.plain)
         }
         .padding(12)
         .background(Color(NSColor.controlBackgroundColor))
@@ -129,8 +156,10 @@ struct ServiceView: View {
                     } else {
                         HStack {
                             Text("\(item.order + 1).")
+                                .font(.caption)
                                 .foregroundColor(.secondary)
-                                .frame(width: 32, alignment: .trailing)
+                                .monospacedDigit()
+                                .frame(width: 28, alignment: .trailing)
                             Text("Missing hymn")
                                 .foregroundColor(.secondary)
                         }
@@ -150,8 +179,7 @@ struct ServiceView: View {
         do {
             try serviceOperations.reorderServiceHymns(service: service, from: from, to: to)
         } catch {
-            // Keep UI responsive; errors will be visible in console.
-            print("Failed to reorder service hymns: \(error)")
+            // Reorder failed - list will show previous state
         }
     }
 
@@ -159,7 +187,7 @@ struct ServiceView: View {
         do {
             try serviceOperations.removeHymnFromTodaysService(hymnId: hymn.id)
         } catch {
-            print("Failed to remove hymn from service: \(error)")
+            // Remove failed - item will remain in service
         }
     }
 
@@ -167,7 +195,7 @@ struct ServiceView: View {
         do {
             try serviceOperations.clearTodaysService()
         } catch {
-            print("Failed to clear service: \(error)")
+            // Clear failed - service will retain items
         }
     }
 
@@ -176,7 +204,7 @@ struct ServiceView: View {
             try serviceOperations.archiveActiveService()
             onSwitchToLibrary()
         } catch {
-            print("Failed to archive service: \(error)")
+            // Archive failed - service will remain active
         }
     }
 }
@@ -188,8 +216,10 @@ private struct ServiceHymnRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Text("\(order).")
+                .font(.caption)
                 .foregroundColor(.secondary)
-                .frame(width: 32, alignment: .trailing)
+                .monospacedDigit()
+                .frame(width: 28, alignment: .trailing)
             Text(hymn.title)
                 .lineLimit(1)
             Spacer()
