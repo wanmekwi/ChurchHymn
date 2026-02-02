@@ -40,10 +40,13 @@ struct HymnListView: View {
                 if hymn.title.lowercased().contains(searchQuery) {
                     return true
                 }
-                // Search in song number if present
-                if let number = hymn.songNumber,
-                   String(number).contains(searchQuery) {
-                    return true
+                // Search in song number if present (e.g. "42" or "#42")
+                if let number = hymn.songNumber {
+                    let numberStr = String(number)
+                    let queryForNumber = searchQuery.hasPrefix("#") ? String(searchQuery.dropFirst()) : searchQuery
+                    if !queryForNumber.isEmpty && (numberStr.contains(queryForNumber) || queryForNumber == numberStr) {
+                        return true
+                    }
                 }
                 // Search in lyrics if present
                 if let lyrics = hymn.lyrics,
@@ -81,7 +84,7 @@ struct HymnListView: View {
         VStack(spacing: 0) {
             // Search + Sort (refined hierarchy)
             VStack(alignment: .leading, spacing: 8) {
-                TextField("Search hymns…", text: $searchText)
+                TextField("Search by title, song number, lyrics…", text: $searchText)
                     .textFieldStyle(.roundedBorder)
 
                 HStack(spacing: 8) {

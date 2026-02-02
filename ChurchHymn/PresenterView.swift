@@ -39,39 +39,9 @@ struct PresenterView: View {
             return min(max(0, index), presentationParts.count - 1)
         }()
 
-        GeometryReader { _ in
+        GeometryReader { geometry in
+            let barWidth = geometry.size.width * 0.9
             VStack(spacing: 0) {
-                // MARK: Top bar: Title (centered) + Key (right)
-                HStack {
-                    Spacer()
-
-                    Text(hymn.title)
-                        .font(.system(size: 36, weight: .bold))
-                        .foregroundColor(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-
-                    Spacer()
-
-                    if let key = hymn.musicalKey, !key.isEmpty {
-                        Text(key)
-                            .font(.system(size: 28, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.85))
-                            .padding(.trailing, 24)
-                    }
-                }
-                .padding(.vertical, 16)
-                .padding(.horizontal, 24)
-
-                // Separator line (90% width, thicker)
-                GeometryReader { geometry in
-                    Rectangle()
-                        .fill(Color.white.opacity(0.3))
-                        .frame(width: geometry.size.width * 0.9, height: 2)
-                        .frame(maxWidth: .infinity)
-                }
-                .frame(height: 2)
-
                 // MARK: Lyrics block
                 Spacer()
 
@@ -102,53 +72,73 @@ struct PresenterView: View {
 
                 Spacer()
 
-                // Separator line (90% width, thicker)
-                GeometryReader { geometry in
+                // Line and bottom bar: same 90% width so bar sits completely under the line (no inner GeometryReader so layout fills screen)
+                VStack(spacing: 0) {
+                    // Separator line (90% width); colour matches bottom bar text
                     Rectangle()
-                        .fill(Color.white.opacity(0.3))
-                        .frame(width: geometry.size.width * 0.9, height: 2)
-                        .frame(maxWidth: .infinity)
-                }
-                .frame(height: 2)
+                        .fill(Color.white.opacity(0.85))
+                        .frame(width: barWidth, height: 6)
 
-                // MARK: Bottom bar
-                HStack {
-                    // Copyright bottom-left
-                    Text(hymn.copyright ?? "")
-                        .font(.system(size: 20))
-                        .foregroundColor(.white.opacity(0.6))
+                    // Bottom bar (below the line, same horizontal extent as line)
+                    HStack {
+                        // Song number bottom-left
+                        if let songNumber = hymn.songNumber {
+                            Text("#\(songNumber)")
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.75))
+                        } else {
+                            Text("")
+                                .font(.system(size: 24))
+                        }
 
-                    Spacer()
+                        Spacer()
 
-                    // Verse/Chorus + end indicator
-                    if !presentationParts.isEmpty {
-                        HStack(spacing: 16) {
-                            if let label = presentationParts[safeIndex].label {
-                                Text(label)
-                                    .font(.system(size: 24, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.85))
-                            } else {
-                                let verseNumber = presentationParts.prefix(safeIndex + 1).filter { $0.label == nil }.count
-                                Text("Verse \(verseNumber)")
-                                    .font(.system(size: 24, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.85))
+                        // Musical key bottom-center
+                        if let key = hymn.musicalKey, !key.isEmpty {
+                            Text(key)
+                                .font(.system(size: 28, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+
+                        Spacer()
+
+                        // Verse/Chorus with up/down arrows on either side (more content above/below)
+                        if !presentationParts.isEmpty {
+                            HStack(spacing: 16) {
+                                // Up triangle: left of label when more verses/chorus before (or at end)
+                                if safeIndex > 0 || safeIndex == presentationParts.count - 1 {
+                                    Image(systemName: "arrowtriangle.up.fill")
+                                        .font(.system(size: 21, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.85))
+                                }
+
+                                if let label = presentationParts[safeIndex].label {
+                                    Text(label)
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.85))
+                                } else {
+                                    let verseNumber = presentationParts.prefix(safeIndex + 1).filter { $0.label == nil }.count
+                                    Text("Verse \(verseNumber)")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.85))
+                                }
+
+                                // Down triangle: right of label when more verses/chorus after
+                                if safeIndex < presentationParts.count - 1 {
+                                    Image(systemName: "arrowtriangle.down.fill")
+                                        .font(.system(size: 21, weight: .semibold))
+                                        .foregroundColor(.white.opacity(0.85))
+                                }
                             }
-
-                            // End of song indicator
-                            if safeIndex == presentationParts.count - 1 {
-                                Text("END")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(.black)
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 6)
-                                    .background(Color.yellow)
-                                    .clipShape(Capsule())
-                            }
+                        } else {
+                            Text("")
                         }
                     }
+                    .frame(width: barWidth)
+                    .padding(.vertical, 16)
+                    .padding(.horizontal, 24)
                 }
-                .padding(.vertical, 16)
-                .padding(.horizontal, 32)
+                .frame(maxWidth: .infinity)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
