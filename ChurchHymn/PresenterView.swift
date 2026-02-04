@@ -42,6 +42,23 @@ struct PresenterView: View {
         GeometryReader { geometry in
             let barWidth = geometry.size.width * 0.9
             VStack(spacing: 0) {
+                // MARK: Title section at top
+                VStack(spacing: 0) {
+                    Text(hymn.title)
+                        .font(.system(size: 48, weight: .semibold))
+                        .minimumScaleFactor(0.3)
+                        .multilineTextAlignment(.center)
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 32)
+                        .padding(.top, 32)
+                        .padding(.bottom, 16)
+
+                    Rectangle()
+                        .fill(Color.white.opacity(0.85))
+                        .frame(width: barWidth, height: 6)
+                }
+                .padding(.bottom, 24)
+
                 // MARK: Lyrics block
                 Spacer()
 

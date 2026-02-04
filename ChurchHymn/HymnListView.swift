@@ -79,6 +79,15 @@ struct HymnListView: View {
             }
         }
     }
+
+    // Helper function to display hymn title with song number when searching
+    private func displayTitle(for hymn: Hymn) -> String {
+        // Only show song number when actively searching
+        if !searchText.isEmpty, let songNumber = hymn.songNumber {
+            return "\(songNumber) - \(hymn.title)"
+        }
+        return hymn.title
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -123,7 +132,7 @@ struct HymnListView: View {
                             }
                     }
 
-                    Text(hymn.title)
+                    Text(displayTitle(for: hymn))
                         .tag(hymn)
 
                     Spacer(minLength: 8)
