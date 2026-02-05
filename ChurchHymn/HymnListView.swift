@@ -80,11 +80,11 @@ struct HymnListView: View {
         }
     }
 
-    // Helper function to display hymn title with song number when searching
+    // Helper function to display hymn title with song number
     private func displayTitle(for hymn: Hymn) -> String {
-        // Only show song number when actively searching
-        if !searchText.isEmpty, let songNumber = hymn.songNumber {
-            return "\(songNumber) - \(hymn.title)"
+        // Always show song number if present
+        if let songNumber = hymn.songNumber {
+            return "\(songNumber). \(hymn.title)"
         }
         return hymn.title
     }

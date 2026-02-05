@@ -27,108 +27,121 @@ struct HymnToolbar {
     let onPresent: (Hymn) -> Void
     
     func createToolbar(openWindow: OpenWindowAction) -> some ToolbarContent {
+        // Sidebar toolbar is empty - all icons are in the detail view toolbar
+        ToolbarItem(placement: .automatic) {
+            EmptyView()
+        }
+    }
+    
+    func createDetailToolbar(openWindow: OpenWindowAction) -> some ToolbarContent {
         Group {
-            ToolbarItemGroup(placement: .navigation) {
-                // Primary: Present
-                Button {
-                    if let hymn = selected {
-                        onPresent(hymn)
-                    }
-                } label: {
-                    Image(systemName: "play.fill")
-                        .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(.green)
-                }
-                .disabled(selected == nil)
-                .help("Present selected hymn")
-                .keyboardShortcut(.return, modifiers: [])
-
-                // Primary: Add Hymn
-                Button {
-                    let hymn = Hymn(title: "")
-                    context.insert(hymn)
-                    newHymn = hymn
-                    selected = hymn
-                    showingEdit = true
-                } label: {
-                    Image(systemName: "plus")
-                        .symbolRenderingMode(.hierarchical)
-                }
-                .help("Add new hymn (⌘N)")
-
-                // Import (icon-only, toolbar convenience)
-                Button {
-                    importType = .auto
-                    currentImportType = .auto
-                } label: {
-                    Image(systemName: "square.and.arrow.down")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.body.weight(.semibold))
-                }
-                .help("Import songs (⌘I)")
-
-                // Edit current (icon-only, toolbar convenience)
-                Button {
-                    showingEdit = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.body.weight(.semibold))
-                }
-                .disabled(selected == nil)
-                .help("Edit selected song (⌘E)")
-
-                // Service menu (with badge)
-                Menu {
-                    Button(hymnFilter == .todaysService ? "Show Library" : "Show Today's Service") {
-                        onToggleTodaysServiceFilter()
-                    }
-
-                    Divider()
-
-                    Button("Add Selected to Today's Service") {
-                        onAddSelectedToTodaysService()
-                    }
-                    .disabled(selected == nil && selectedHymnsForDelete.isEmpty)
-
-                    Button("Remove Selected from Today's Service") {
-                        onRemoveSelectedFromTodaysService()
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 16) {
+                    // Primary: Present
+                    Button {
+                        if let hymn = selected {
+                            onPresent(hymn)
+                        }
+                    } label: {
+                        Image(systemName: "play.fill")
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.green)
+                            .font(.title2)
                     }
                     .disabled(selected == nil)
+                    .help("Present selected hymn")
+                    .keyboardShortcut(.return, modifiers: [])
 
-                    Divider()
-
-                    Button("Clear Today's Service", role: .destructive) {
-                        onClearTodaysService()
-                    }
-                    .disabled(todaysServiceCount == 0)
-                } label: {
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: hymnFilter == .todaysService ? "music.note.list" : "music.note")
+                    // Primary: Add Hymn
+                    Button {
+                        let hymn = Hymn(title: "")
+                        context.insert(hymn)
+                        newHymn = hymn
+                        selected = hymn
+                        showingEdit = true
+                    } label: {
+                        Image(systemName: "plus")
                             .symbolRenderingMode(.hierarchical)
+                            .font(.title2)
+                    }
+                    .help("Add new hymn (⌘N)")
 
-                        if todaysServiceCount > 0 {
-                            Text("\(todaysServiceCount)")
-                                .font(.caption2)
-                                .foregroundStyle(.white)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(Color.accentColor)
-                                .clipShape(Capsule())
-                                .offset(x: 9, y: -7)
+                    // Import (icon-only, toolbar convenience)
+                    Button {
+                        importType = .auto
+                        currentImportType = .auto
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                            .symbolRenderingMode(.hierarchical)
+                            .font(.title2)
+                    }
+                    .help("Import songs (⌘I)")
+
+                    // Edit current (icon-only, toolbar convenience)
+                    Button {
+                        showingEdit = true
+                    } label: {
+                        Image(systemName: "pencil")
+                            .symbolRenderingMode(.hierarchical)
+                            .font(.title2)
+                    }
+                    .disabled(selected == nil)
+                    .help("Edit selected song (⌘E)")
+
+                    // Service menu (with badge)
+                    Menu {
+                        Button(hymnFilter == .todaysService ? "Show Library" : "Show Today's Service") {
+                            onToggleTodaysServiceFilter()
+                        }
+
+                        Divider()
+
+                        Button("Add Selected to Today's Service") {
+                            onAddSelectedToTodaysService()
+                        }
+                        .disabled(selected == nil && selectedHymnsForDelete.isEmpty)
+
+                        Button("Remove Selected from Today's Service") {
+                            onRemoveSelectedFromTodaysService()
+                        }
+                        .disabled(selected == nil)
+
+                        Divider()
+
+                        Button("Clear Today's Service", role: .destructive) {
+                            onClearTodaysService()
+                        }
+                        .disabled(todaysServiceCount == 0)
+                    } label: {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: hymnFilter == .todaysService ? "music.note.list" : "music.note")
+                                .symbolRenderingMode(.hierarchical)
+                                .font(.title2)
+
+                            if todaysServiceCount > 0 {
+                                Text("\(todaysServiceCount)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(Color.accentColor)
+                                    .clipShape(Capsule())
+                                    .offset(x: 9, y: -7)
+                            }
                         }
                     }
+                    .help(hymnFilter == .todaysService ? "Service (showing Today's Service)" : "Service")
                 }
-                .help(hymnFilter == .todaysService ? "Service (showing Today's Service)" : "Service")
             }
             
             ToolbarItemGroup(placement: .primaryAction) {
                 // Help icon – far right
                 Button {
-                    openWindow(id: "importHelp")   // must match the WindowGroup id above
+                    openWindow(id: "importHelp")
                 } label: {
                     Image(systemName: "questionmark.circle")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("Show import-file help")
                 
@@ -162,6 +175,7 @@ struct HymnToolbar {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("Export")
                 
@@ -177,7 +191,6 @@ struct HymnToolbar {
                             selectedHymnsForDelete.removeAll()
                         }
                     }
-                    // Shortcut is defined in the app menu; toolbar is convenience.
                     
                     if isMultiSelectMode {
                         Divider()
@@ -220,6 +233,7 @@ struct HymnToolbar {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("Manage")
             }

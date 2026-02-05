@@ -91,6 +91,7 @@ struct ServiceView: View {
                 Button { onSwitchToLibrary() } label: {
                     Image(systemName: "plus")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("Add hymns to service")
                 .disabled(todaysService == nil && hymns.isEmpty)
@@ -98,12 +99,14 @@ struct ServiceView: View {
                 Button { showingCreateService = true } label: {
                     Image(systemName: "calendar.badge.plus")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("New service")
 
                 Button { showingServiceHistory = true } label: {
                     Image(systemName: "clock.arrow.circlepath")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("Service history")
 
@@ -112,6 +115,7 @@ struct ServiceView: View {
                 Button { showingArchiveConfirm = true } label: {
                     Image(systemName: "archivebox")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("Archive current service")
                 .disabled(todaysService == nil)
@@ -119,6 +123,7 @@ struct ServiceView: View {
                 Button(role: .destructive) { showingClearConfirm = true } label: {
                     Image(systemName: "trash")
                         .symbolRenderingMode(.hierarchical)
+                        .font(.title2)
                 }
                 .help("Clear hymns from current service")
                 .disabled(orderedItems.isEmpty)

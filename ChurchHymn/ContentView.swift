@@ -209,22 +209,52 @@ struct ContentView: View {
             )
 
         } detail: {
-            if isMultiSelectMode {
-                MultiSelectDetailView(selectedHymnsForDelete: selectedHymnsForDelete)
-            } else if let hymn = selected {
-                DetailView(
-                    hymn: hymn,
-                    currentPresentationIndex: presentedHymnIndex,
-                    isPresenting: isPresenting,
-                    isInTodaysService: todaysServiceHymnIds.contains(hymn.id),
-                    onAddToTodaysService: { addHymnsToTodaysService([hymn]) },
-                    onRemoveFromTodaysService: { removeHymnFromTodaysService(hymn) },
-                    onPresentPart: { partIndex in
-                        presentFromDetail(hymn, partIndex: partIndex)
-                    }
+            Group {
+                if isMultiSelectMode {
+                    MultiSelectDetailView(selectedHymnsForDelete: selectedHymnsForDelete)
+                } else if let hymn = selected {
+                    DetailView(
+                        hymn: hymn,
+                        currentPresentationIndex: presentedHymnIndex,
+                        isPresenting: isPresenting,
+                        isInTodaysService: todaysServiceHymnIds.contains(hymn.id),
+                        onAddToTodaysService: { addHymnsToTodaysService([hymn]) },
+                        onRemoveFromTodaysService: { removeHymnFromTodaysService(hymn) },
+                        onPresentPart: { partIndex in
+                            presentFromDetail(hymn, partIndex: partIndex)
+                        }
+                    )
+                } else {
+                    EmptyDetailView()
+                }
+            }
+            .toolbar {
+                HymnToolbar(
+                    hymns: hymns,
+                    todaysServiceCount: todaysServiceCount,
+                    hymnFilter: $hymnFilter,
+                    selected: $selected,
+                    isLivePresenting: $isLivePresenting,
+                    selectedHymnsForDelete: $selectedHymnsForDelete,
+                    isMultiSelectMode: $isMultiSelectMode,
+                    showingEdit: $showingEdit,
+                    newHymn: $newHymn,
+                    importType: $importType,
+                    currentImportType: $currentImportType,
+                    selectedHymnsForExport: $selectedHymnsForExport,
+                    showingExportSelection: $showingExportSelection,
+                    hymnToDelete: $hymnToDelete,
+                    showingDeleteConfirmation: $showingDeleteConfirmation,
+                    showingBatchDeleteConfirmation: $showingBatchDeleteConfirmation,
+                    context: context,
+                    onToggleTodaysServiceFilter: toggleTodaysServiceFilter,
+                    onAddSelectedToTodaysService: addSelectedToTodaysService,
+                    onRemoveSelectedFromTodaysService: removeSelectedFromTodaysService,
+                    onClearTodaysService: clearTodaysService,
+                    onPresent: present
+                ).createDetailToolbar(
+                    openWindow: openWindow
                 )
-            } else {
-                EmptyDetailView()
             }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
