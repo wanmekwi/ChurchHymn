@@ -97,6 +97,11 @@ struct ContentView: View {
         todaysServiceHymns.count
     }
 
+    // Hymn lookup dictionary for O(1) performance
+    private var hymnLookup: [UUID: Hymn] {
+        Dictionary(uniqueKeysWithValues: hymns.map { ($0.id, $0) })
+    }
+
     var body: some View {
         NavigationSplitView {
             VStack(spacing: 0) {
@@ -133,7 +138,8 @@ struct ContentView: View {
                         showingBatchDeleteConfirmation: $showingBatchDeleteConfirmation,
                         onAddToTodaysService: addHymnsToTodaysService,
                         onRemoveFromTodaysService: removeHymnFromTodaysService,
-                        onPresent: present
+                        onPresent: present,
+                        presenterSession: presenterSession
                     )
                 }
             }
@@ -296,6 +302,13 @@ struct ContentView: View {
         .onChange(of: presentedHymnId) { _, _ in
             syncPresenterSessionFromPresentedId()
         }
+        .onChange(of: selected?.id) { _, newId in
+            // When presenter is already open, switch to the newly selected song immediately
+            if isPresenting, let newId, presenterWindow != nil {
+                presentedHymnId = newId
+                syncPresenterSessionFromPresentedId()
+            }
+        }
         .onChange(of: hymns.map(\.id)) { _, _ in
             // If the currently presented hymn was deleted, fall back to a safe empty state.
             syncPresenterSessionFromPresentedId()
@@ -435,7 +448,8 @@ struct ContentView: View {
 
     private func syncPresenterSessionFromPresentedId() {
         guard let id = presentedHymnId else { return }
-        presenterSession.hymn = hymns.first(where: { $0.id == id })
+        // Use O(1) dictionary lookup instead of O(n) array search
+        presenterSession.hymn = hymnLookup[id]
         if presenterSession.hymn == nil {
             // Hymn no longer exists (e.g. deleted) → safe empty state.
             presentedHymnId = nil
@@ -445,12 +459,25 @@ struct ContentView: View {
     private func showPresenterWindow() {
         isPresenting = true
         ensurePresenterWindow()
-        presenterWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
 
-        // Enter full screen on the target display (only if needed).
-        if let window = presenterWindow, !window.styleMask.contains(.fullScreen) {
-            window.toggleFullScreen(nil)
+        if let window = presenterWindow {
+            // Order window front and make it key
+            window.orderFront(nil)
+            window.makeKeyAndOrderFront(nil)
+
+            // Activate app and make window key
+            NSApp.activate(ignoringOtherApps: true)
+
+            // Small delay to ensure window is ready before fullscreen
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                // Ensure window is key and can receive events
+                window.makeKey()
+
+                // Enter full screen on the target display (only if needed).
+                if !window.styleMask.contains(.fullScreen) {
+                    window.toggleFullScreen(nil)
+                }
+            }
         }
     }
 
@@ -500,7 +527,9 @@ struct ContentView: View {
         )
 
         let hostingController = NSHostingController(rootView: rootView)
-        let window = NSWindow(contentViewController: hostingController)
+
+        // Use custom window class that properly accepts keyboard events
+        let window = PresenterWindow(contentViewController: hostingController)
         window.title = "Presenter"
         window.identifier = NSUserInterfaceItemIdentifier("PresenterWindow")
 
@@ -508,10 +537,12 @@ struct ContentView: View {
         let screens = NSScreen.screens
         let targetScreen = screens.count > 1 ? screens[1] : screens[0]
 
-        // Configure window
+        // Configure window to receive keyboard events
         window.styleMask.remove(.titled)
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.collectionBehavior = [.fullScreenPrimary]
+        window.acceptsMouseMovedEvents = true
+        window.isOpaque = true
 
         // Position on target screen
         let screenFrame = targetScreen.frame
@@ -1176,6 +1207,13 @@ struct ContentView: View {
         default: return "Export"
         }
     }
+}
+
+// Custom window class that accepts key events
+private class PresenterWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+    override var acceptsFirstResponder: Bool { true }
 }
 
 private final class PresenterWindowDelegate: NSObject, NSWindowDelegate {

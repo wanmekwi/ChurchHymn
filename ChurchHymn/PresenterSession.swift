@@ -4,6 +4,9 @@ import SwiftUI
 final class PresenterSession: ObservableObject {
     @Published var hymn: Hymn? = nil
     @Published var requestedIndex: Int? = nil
+    /// True when the search field in HymnListView is focused.
+    /// The presenter keyboard monitor yields to the search field when this is set.
+    @Published var isSearchFieldActive: Bool = false
 }
 
 struct PresenterRootView: View {
@@ -17,7 +20,8 @@ struct PresenterRootView: View {
                 hymn: hymn,
                 requestedIndex: $session.requestedIndex,
                 onIndexChange: { onIndexChange($0) },
-                onRequestClose: onRequestClose
+                onRequestClose: onRequestClose,
+                presenterSession: session
             )
         } else {
             VStack(spacing: 18) {

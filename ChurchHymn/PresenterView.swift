@@ -12,31 +12,22 @@ struct PresenterView: View {
     @Binding var requestedIndex: Int?
     var onIndexChange: (Int) -> Void
     var onRequestClose: () -> Void
+    @ObservedObject var presenterSession: PresenterSession
     @State private var index: Int = 0
-    @State private var monitor: Any?
+    @State private var localMonitor: Any?
+    @State private var globalMonitor: Any?
+    @State private var cachedPresentationParts: [(label: String?, lines: [String])] = []
+    @State private var cachedHymnId: UUID?
 
-    /// Sequence for presentation: if a chorus exists, repeat it after each verse;
-    /// otherwise present each verse block in order.
-    private var presentationParts: [(label: String?, lines: [String])] {
-        let allBlocks = hymn.parts
-        // Extract chorus blocks
-        let choruses = allBlocks.filter { $0.label != nil }
-        let verses = allBlocks.filter { $0.label == nil }
-        if let chorusPart = choruses.first {
-            // Interleave verse and chorus
-            return verses.flatMap { [$0, chorusPart] }
-        } else {
-            // No chorus: just show each verse block
-            return verses
-        }
-    }
-    
     var body: some View {
+        // Use cached presentation parts for better performance
+        let parts = cachedPresentationParts
+
         // Defensive: the hymn (or its lyrics) can change while this view is alive.
         // SwiftUI may re-render before our `onChange` handlers run, so always clamp.
         let safeIndex: Int = {
-            guard !presentationParts.isEmpty else { return 0 }
-            return min(max(0, index), presentationParts.count - 1)
+            guard !parts.isEmpty else { return 0 }
+            return min(max(0, index), parts.count - 1)
         }()
 
         GeometryReader { geometry in
@@ -62,13 +53,16 @@ struct PresenterView: View {
                 // MARK: Lyrics block
                 Spacer()
 
-                if !presentationParts.isEmpty {
-                    Text(presentationParts[safeIndex].lines.joined(separator: "\n"))
+                if !parts.isEmpty {
+                    Text(parts[safeIndex].lines.joined(separator: "\n"))
                         .font(.system(size: 80, weight: .bold))
                         .minimumScaleFactor(0.1)
                         .multilineTextAlignment(.center)
                         .foregroundColor(.white)
                         .padding(.horizontal, 32)
+                        .id("lyrics-\(safeIndex)")
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: safeIndex)
                 } else if let lyrics = hymn.lyrics, !lyrics.isEmpty {
                     Text(lyrics)
                         .font(.system(size: 60, weight: .bold))
@@ -120,33 +114,36 @@ struct PresenterView: View {
                         Spacer()
 
                         // Verse/Chorus with up/down arrows on either side (more content above/below)
-                        if !presentationParts.isEmpty {
+                        if !parts.isEmpty {
                             HStack(spacing: 16) {
                                 // Up triangle: left of label when more verses/chorus before (or at end)
-                                if safeIndex > 0 || safeIndex == presentationParts.count - 1 {
+                                if safeIndex > 0 || safeIndex == parts.count - 1 {
                                     Image(systemName: "arrowtriangle.up.fill")
                                         .font(.system(size: 21, weight: .semibold))
                                         .foregroundColor(.white.opacity(0.85))
+                                        .transition(.opacity)
                                 }
 
-                                if let label = presentationParts[safeIndex].label {
+                                if let label = parts[safeIndex].label {
                                     Text(label)
                                         .font(.system(size: 24, weight: .semibold))
                                         .foregroundColor(.white.opacity(0.85))
                                 } else {
-                                    let verseNumber = presentationParts.prefix(safeIndex + 1).filter { $0.label == nil }.count
+                                    let verseNumber = parts.prefix(safeIndex + 1).filter { $0.label == nil }.count
                                     Text("Verse \(verseNumber)")
                                         .font(.system(size: 24, weight: .semibold))
                                         .foregroundColor(.white.opacity(0.85))
                                 }
 
                                 // Down triangle: right of label when more verses/chorus after
-                                if safeIndex < presentationParts.count - 1 {
+                                if safeIndex < parts.count - 1 {
                                     Image(systemName: "arrowtriangle.down.fill")
                                         .font(.system(size: 21, weight: .semibold))
                                         .foregroundColor(.white.opacity(0.85))
+                                        .transition(.opacity)
                                 }
                             }
+                            .animation(.easeInOut(duration: 0.15), value: safeIndex)
                         } else {
                             Text("")
                         }
@@ -160,8 +157,12 @@ struct PresenterView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.black)
             .onAppear {
-                startMonitor()
+                updatePresentationPartsCache()
                 onIndexChange(safeIndex)
+                // Delay starting monitor to ensure window is ready
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    startMonitor()
+                }
             }
             .onDisappear {
                 stopMonitor()
@@ -170,13 +171,14 @@ struct PresenterView: View {
                 onIndexChange(newIndex)
             }
             .onChange(of: hymn.id) { _, _ in
-                // When the hymn changes, reset to the first part for a predictable live-update experience.
+                // When the hymn changes, update cache and reset to the first part
+                updatePresentationPartsCache()
                 index = 0
                 onIndexChange(0)
             }
             .onChange(of: requestedIndex) { _, newValue in
                 guard let newValue else { return }
-                if !presentationParts.isEmpty, newValue >= 0, newValue < presentationParts.count {
+                if !cachedPresentationParts.isEmpty, newValue >= 0, newValue < cachedPresentationParts.count {
                     index = newValue
                     onIndexChange(newValue)
                 }
@@ -186,14 +188,30 @@ struct PresenterView: View {
         }
         .ignoresSafeArea()
     }
-    
+
+    private func updatePresentationPartsCache() {
+        // Only update if hymn ID changed
+        guard cachedHymnId != hymn.id else { return }
+
+        cachedHymnId = hymn.id
+        let allBlocks = hymn.parts
+        let choruses = allBlocks.filter { $0.label != nil }
+        let verses = allBlocks.filter { $0.label == nil }
+
+        if let chorusPart = choruses.first {
+            cachedPresentationParts = verses.flatMap { [$0, chorusPart] }
+        } else {
+            cachedPresentationParts = verses
+        }
+    }
+
     private func advance() {
         // Only advance if we're not at the last part
-        if index < presentationParts.count - 1 {
+        if index < cachedPresentationParts.count - 1 {
             index += 1
         }
     }
-    
+
     private func retreat() {
         // Only retreat if we're not at the first part
         if index > 0 {
@@ -201,71 +219,97 @@ struct PresenterView: View {
         }
     }
     
-    private func startMonitor() {
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            // Allow presenter navigation even when the main app window is focused,
-            // but never steal keystrokes while the user is typing into a text field (e.g. search).
-            if let responder = NSApp.keyWindow?.firstResponder,
-               responder is NSTextView || responder is NSTextField {
-                return event
-            }
+    private func handleKeyEvent(_ event: NSEvent) {
+        // Get the character if available
+        let char = event.characters?.lowercased().first
 
-            // Only react if the presenter window exists (open/visible).
-            let presenterIsOpen = NSApp.windows.contains(where: { win in
-                win.identifier?.rawValue == "PresenterWindow" && win.isVisible
-            })
-            if !presenterIsOpen {
-                return event
+        switch event.keyCode {
+        case 49, 124, 125: // Space, Right, Down
+            DispatchQueue.main.async {
+                self.advance()
             }
-
-            // Get the character if available
-            let char = event.characters?.lowercased().first
-            
-            switch event.keyCode {
-            case 49, 36, 124, 125: // Space, Return, Right, Down
-                advance()
-            case 123, 126: // Left, Up
-                retreat()
-            case 53: // ESC key
-                DispatchQueue.main.async {
-                    onRequestClose()
-                }
-                return nil
-            default:
-                // Handle number keys (1-9) for verses and 'c' for chorus
-                if let character = char {
-                    if character == "c" {
-                        // Find and show chorus
-                        if let chorusIndex = presentationParts.firstIndex(where: { $0.label?.lowercased().contains("chorus") ?? false }) {
-                            index = chorusIndex
+        case 123, 126: // Left, Up
+            DispatchQueue.main.async {
+                self.retreat()
+            }
+        case 53: // ESC key
+            DispatchQueue.main.async {
+                onRequestClose()
+            }
+        default:
+            // Handle number keys (1-9) for verses and 'c' for chorus
+            if let character = char {
+                if character == "c" {
+                    // Jump to the next chorus after the current position;
+                    // if none found, wrap to the first chorus.
+                    DispatchQueue.main.async {
+                        let parts = self.cachedPresentationParts
+                        let cur = self.index
+                        // Search forward from current position
+                        let afterCurrent = parts[(cur + 1)...].firstIndex(where: {
+                            $0.label?.lowercased().contains("chorus") ?? false
+                        })
+                        // Wrap around: search from the beginning
+                        let fromStart = parts.firstIndex(where: {
+                            $0.label?.lowercased().contains("chorus") ?? false
+                        })
+                        if let target = afterCurrent ?? fromStart {
+                            self.index = target
                         }
-                        return nil
-                    } else if character >= "1" && character <= "9" {
-                        let number = Int(String(character))!
-                        // Jump to verse N (verses are parts without a label)
+                    }
+                } else if character >= "1" && character <= "9" {
+                    let number = Int(String(character))!
+                    // Jump to verse N (verses are parts without a label)
+                    DispatchQueue.main.async {
                         var verseCount = 0
-                        for (i, part) in presentationParts.enumerated() {
+                        for (i, part) in self.cachedPresentationParts.enumerated() {
                             if part.label == nil {
                                 verseCount += 1
                                 if verseCount == number {
-                                    index = i
+                                    self.index = i
                                     break
                                 }
                             }
                         }
-                        return nil
                     }
                 }
-                return event
             }
-            return nil
         }
     }
-    
+
+    private func startMonitor() {
+        // Local monitor - can modify/consume events
+        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
+            // Only yield to the search field — not to other text views (e.g. List internals)
+            if presenterSession.isSearchFieldActive {
+                return event
+            }
+
+            // Pass Return through — HymnListView handles it to present the selected song
+            if event.keyCode == 36 {
+                return event
+            }
+
+            handleKeyEvent(event)
+            return nil  // Consume the event
+        }
+
+        // Global monitor - for when presenter window is fullscreen on another display
+        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [self] event in
+            // Skip Return — handled by HymnListView to present the selected song
+            guard event.keyCode != 36 else { return }
+            handleKeyEvent(event)
+        }
+    }
+
     private func stopMonitor() {
-        if let m = monitor { 
+        if let m = localMonitor {
             NSEvent.removeMonitor(m)
-            monitor = nil 
+            localMonitor = nil
+        }
+        if let m = globalMonitor {
+            NSEvent.removeMonitor(m)
+            globalMonitor = nil
         }
     }
 }
