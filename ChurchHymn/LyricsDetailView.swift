@@ -13,18 +13,19 @@ struct LyricsDetailView: View {
     var onSelectPart: ((Int) -> Void)? = nil
     
     @Namespace private var scrollSpace
-    
-    private var parts: [(label: String?, lines: [String])] {
+    @State private var parts: [(label: String?, lines: [String])] = []
+    @State private var cachedHymnId: UUID?
+
+    private func updatePartsCache() {
+        guard cachedHymnId != hymn.id else { return }
+        cachedHymnId = hymn.id
         let allBlocks = hymn.parts
-        // Extract chorus blocks
         let choruses = allBlocks.filter { $0.label != nil }
         let verses = allBlocks.filter { $0.label == nil }
         if let chorusPart = choruses.first {
-            // Interleave verse and chorus
-            return verses.flatMap { [$0, chorusPart] }
+            parts = verses.flatMap { [$0, chorusPart] }
         } else {
-            // No chorus: just show each verse block
-            return verses
+            parts = verses
         }
     }
     
@@ -103,6 +104,12 @@ struct LyricsDetailView: View {
                         proxy.scrollTo(0, anchor: .top)
                     }
                 }
+            }
+            .onAppear {
+                updatePartsCache()
+            }
+            .onChange(of: hymn.id) { _, _ in
+                updatePartsCache()
             }
         }
     }

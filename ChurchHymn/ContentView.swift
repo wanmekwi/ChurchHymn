@@ -97,10 +97,8 @@ struct ContentView: View {
         todaysServiceHymns.count
     }
 
-    // Hymn lookup dictionary for O(1) performance
-    private var hymnLookup: [UUID: Hymn] {
-        Dictionary(uniqueKeysWithValues: hymns.map { ($0.id, $0) })
-    }
+    // Hymn lookup dictionary for O(1) performance — cached, rebuilt only when hymns change
+    @State private var hymnLookup: [UUID: Hymn] = [:]
 
     var body: some View {
         NavigationSplitView {
@@ -297,7 +295,11 @@ struct ContentView: View {
             operations.updateContext(context)
             serviceOperations.updateContext(context)
             setupMenuActionHandling()
+            hymnLookup = Dictionary(uniqueKeysWithValues: hymns.map { ($0.id, $0) })
             syncPresenterSessionFromPresentedId()
+        }
+        .onChange(of: hymns) { _, newHymns in
+            hymnLookup = Dictionary(uniqueKeysWithValues: newHymns.map { ($0.id, $0) })
         }
         .onChange(of: presentedHymnId) { _, _ in
             syncPresenterSessionFromPresentedId()
@@ -309,7 +311,7 @@ struct ContentView: View {
                 syncPresenterSessionFromPresentedId()
             }
         }
-        .onChange(of: hymns.map(\.id)) { _, _ in
+        .onChange(of: hymns.count) { _, _ in
             // If the currently presented hymn was deleted, fall back to a safe empty state.
             syncPresenterSessionFromPresentedId()
         }

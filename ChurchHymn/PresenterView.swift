@@ -14,8 +14,6 @@ struct PresenterView: View {
     var onRequestClose: () -> Void
     @ObservedObject var presenterSession: PresenterSession
     @State private var index: Int = 0
-    @State private var localMonitor: Any?
-    @State private var globalMonitor: Any?
     @State private var cachedPresentationParts: [(label: String?, lines: [String])] = []
     @State private var cachedHymnId: UUID?
 
@@ -159,13 +157,9 @@ struct PresenterView: View {
             .onAppear {
                 updatePresentationPartsCache()
                 onIndexChange(safeIndex)
-                // Delay starting monitor to ensure window is ready
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    startMonitor()
+                presenterSession.keyEventHandler = { event in
+                    handleKeyEvent(event)
                 }
-            }
-            .onDisappear {
-                stopMonitor()
             }
             .onChange(of: index) { _, newIndex in
                 onIndexChange(newIndex)
@@ -175,6 +169,9 @@ struct PresenterView: View {
                 updatePresentationPartsCache()
                 index = 0
                 onIndexChange(0)
+                presenterSession.keyEventHandler = { event in
+                    handleKeyEvent(event)
+                }
             }
             .onChange(of: requestedIndex) { _, newValue in
                 guard let newValue else { return }
@@ -225,50 +222,38 @@ struct PresenterView: View {
 
         switch event.keyCode {
         case 49, 124, 125: // Space, Right, Down
-            DispatchQueue.main.async {
-                self.advance()
-            }
+            advance()
         case 123, 126: // Left, Up
-            DispatchQueue.main.async {
-                self.retreat()
-            }
-        case 53: // ESC key
-            DispatchQueue.main.async {
-                onRequestClose()
-            }
+            retreat()
         default:
             // Handle number keys (1-9) for verses and 'c' for chorus
             if let character = char {
                 if character == "c" {
                     // Jump to the next chorus after the current position;
                     // if none found, wrap to the first chorus.
-                    DispatchQueue.main.async {
-                        let parts = self.cachedPresentationParts
-                        let cur = self.index
-                        // Search forward from current position
-                        let afterCurrent = parts[(cur + 1)...].firstIndex(where: {
-                            $0.label?.lowercased().contains("chorus") ?? false
-                        })
-                        // Wrap around: search from the beginning
-                        let fromStart = parts.firstIndex(where: {
-                            $0.label?.lowercased().contains("chorus") ?? false
-                        })
-                        if let target = afterCurrent ?? fromStart {
-                            self.index = target
-                        }
+                    let parts = cachedPresentationParts
+                    let cur = index
+                    // Search forward from current position
+                    let afterCurrent = parts[(cur + 1)...].firstIndex(where: {
+                        $0.label?.lowercased().contains("chorus") ?? false
+                    })
+                    // Wrap around: search from the beginning
+                    let fromStart = parts.firstIndex(where: {
+                        $0.label?.lowercased().contains("chorus") ?? false
+                    })
+                    if let target = afterCurrent ?? fromStart {
+                        index = target
                     }
                 } else if character >= "1" && character <= "9" {
                     let number = Int(String(character))!
                     // Jump to verse N (verses are parts without a label)
-                    DispatchQueue.main.async {
-                        var verseCount = 0
-                        for (i, part) in self.cachedPresentationParts.enumerated() {
-                            if part.label == nil {
-                                verseCount += 1
-                                if verseCount == number {
-                                    self.index = i
-                                    break
-                                }
+                    var verseCount = 0
+                    for (i, part) in cachedPresentationParts.enumerated() {
+                        if part.label == nil {
+                            verseCount += 1
+                            if verseCount == number {
+                                index = i
+                                break
                             }
                         }
                     }
@@ -277,39 +262,4 @@ struct PresenterView: View {
         }
     }
 
-    private func startMonitor() {
-        // Local monitor - can modify/consume events
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
-            // Only yield to the search field — not to other text views (e.g. List internals)
-            if presenterSession.isSearchFieldActive {
-                return event
-            }
-
-            // Pass Return through — HymnListView handles it to present the selected song
-            if event.keyCode == 36 {
-                return event
-            }
-
-            handleKeyEvent(event)
-            return nil  // Consume the event
-        }
-
-        // Global monitor - for when presenter window is fullscreen on another display
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [self] event in
-            // Skip Return — handled by HymnListView to present the selected song
-            guard event.keyCode != 36 else { return }
-            handleKeyEvent(event)
-        }
-    }
-
-    private func stopMonitor() {
-        if let m = localMonitor {
-            NSEvent.removeMonitor(m)
-            localMonitor = nil
-        }
-        if let m = globalMonitor {
-            NSEvent.removeMonitor(m)
-            globalMonitor = nil
-        }
-    }
 }

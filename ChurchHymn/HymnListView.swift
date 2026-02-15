@@ -35,33 +35,41 @@ struct HymnListView: View {
         var id: String { self.rawValue }
     }
     
+    /// Normalize text for forgiving search: lowercased, diacritics folded, punctuation stripped.
+    private func normalizeForSearch(_ text: String) -> String {
+        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .filter { $0.isLetter || $0.isNumber || $0.isWhitespace }
+    }
+
     var filteredHymns: [Hymn] {
         let filtered: [Hymn]
         if debouncedSearchText.isEmpty {
             filtered = hymns
         } else {
+            let searchQuery = normalizeForSearch(debouncedSearchText)
             filtered = hymns.filter { hymn in
-                let searchQuery = debouncedSearchText.lowercased()
                 // Search in title
-                if hymn.title.lowercased().contains(searchQuery) {
+                if normalizeForSearch(hymn.title).contains(searchQuery) {
                     return true
                 }
                 // Search in song number if present (e.g. "42" or "#42")
                 if let number = hymn.songNumber {
                     let numberStr = String(number)
-                    let queryForNumber = searchQuery.hasPrefix("#") ? String(searchQuery.dropFirst()) : searchQuery
+                    let queryForNumber = debouncedSearchText.hasPrefix("#")
+                        ? String(debouncedSearchText.dropFirst()).trimmingCharacters(in: .whitespaces)
+                        : debouncedSearchText.trimmingCharacters(in: .whitespaces)
                     if !queryForNumber.isEmpty && (numberStr.contains(queryForNumber) || queryForNumber == numberStr) {
                         return true
                     }
                 }
                 // Search in lyrics if present
                 if let lyrics = hymn.lyrics,
-                   lyrics.lowercased().contains(searchQuery) {
+                   normalizeForSearch(lyrics).contains(searchQuery) {
                     return true
                 }
                 // Search in author if present
                 if let author = hymn.author,
-                   author.lowercased().contains(searchQuery) {
+                   normalizeForSearch(author).contains(searchQuery) {
                     return true
                 }
                 return false
@@ -171,9 +179,24 @@ struct HymnListView: View {
 
     private var searchAndSortHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TextField("Search by title, song number, lyrics…", text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .focused($isSearchFocused)
+            HStack(spacing: 4) {
+                TextField("Search by title, song number, lyrics…", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isSearchFocused)
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        debouncedSearchText = ""
+                        searchDebounceTask?.cancel()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Clear search")
+                }
+            }
 
             HStack(spacing: 8) {
                 Text("Sort:")
